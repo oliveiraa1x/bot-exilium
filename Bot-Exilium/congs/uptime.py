@@ -1,25 +1,24 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import datetime
 
-class Uptime(commands.Cog):
+class Mensagem(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     def cog_unload(self):
-        self.bot.tree.remove_command(self.uptime.name, type=self.uptime.type)
+        self.bot.tree.remove_command(self.mensagem.name, type=self.mensagem.type)
 
-    @app_commands.command(name="uptime", description="Mostra há quanto tempo o bot está online.")
-    async def uptime(self, interaction: discord.Interaction):
-        now = datetime.datetime.now()
-        diff = now - self.bot.start_time
-        h, r = divmod(int(diff.total_seconds()), 3600)
-        m, s = divmod(r, 60)
-
-        await interaction.response.send_message(f"⏳ Uptime: **{h}h {m}m {s}s**")
+    @app_commands.command(name="mensagem", description="Cria mensagens personalizadas.")
+    async def mensagem(self, interaction: discord.Interaction, titulo: str, texto: str):
+        embed = discord.Embed(
+            title=titulo,
+            description=texto,
+            color=discord.Color.blurple()
+        )
+        await interaction.response.send_message(embed=embed)
 
 async def setup(bot):
-    cog = Uptime(bot)
+    cog = Mensagem(bot)
     await bot.add_cog(cog)
-    bot.tree.add_command(cog.uptime)
+    bot.tree.add_command(cog.mensagem)
