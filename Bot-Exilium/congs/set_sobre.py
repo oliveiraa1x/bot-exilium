@@ -1,24 +1,29 @@
+
 import discord
 from discord.ext import commands
 from discord import app_commands
 
-class Mensagem(commands.Cog):
+class SetSobre(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     def cog_unload(self):
-        self.bot.tree.remove_command(self.mensagem.name, type=self.mensagem.type)
+        self.bot.tree.remove_command(self.set_sobre.name, type=self.set_sobre.type)
 
-    @app_commands.command(name="mensagem", description="Cria mensagens personalizadas.")
-    async def mensagem(self, interaction: discord.Interaction, titulo: str, texto: str):
-        embed = discord.Embed(
-            title=titulo,
-            description=texto,
-            color=discord.Color.blurple()
-        )
-        await interaction.response.send_message(embed=embed)
+    @app_commands.command(name="set-sobre", description="Define seu Sobre Mim.")
+    async def set_sobre(self, interaction: discord.Interaction, texto: str):
+        db = self.bot.db()
+        uid = str(interaction.user.id)
+
+        if uid not in db:
+            db[uid] = {"sobre": None, "tempo_total": 0}
+
+        db[uid]["sobre"] = texto
+        self.bot.save_db(db)
+
+        await interaction.response.send_message(f"✅ Sobre Mim atualizado!")
 
 async def setup(bot):
-    cog = Mensagem(bot)
+    cog = SetSobre(bot)
     await bot.add_cog(cog)
-    bot.tree.add_command(cog.mensagem)
+    bot.tree.add_command(cog.set_sobre)

@@ -1,3 +1,4 @@
+
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -56,4 +57,3 @@ async def setup(bot):
     cog = CallStatus(bot)
     await bot.add_cog(cog)
     bot.tree.add_command(cog.callstatus)
-
