@@ -1,3 +1,3 @@
 # bot-exilium
 
-add teste
+add teste do teste
