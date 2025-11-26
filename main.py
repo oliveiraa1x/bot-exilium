@@ -175,7 +175,7 @@ async def slash_help(interaction: discord.Interaction):
         color=discord.Color.blurple(),
     )
     embed.add_field(name="<:membro:1428925668950806558> Perfil", value="/perfil [membro] - Mostra os detalhes do perfil", inline=False)
-    embed.add_field(name="<:papel:1440921269846413475> Mensagens", value="/mensagem <título> <texto> - Cria uma embed simples", inline=False)
+    embed.add_field(name="<:papel:1440921269846413475> Mensagens", value="/mensagem <título> <texto> - Cria uma embed simples\n/frase <frase> - Envia uma frase ou poesia", inline=False)
     embed.add_field(name="<:papel:1440921269846413475> Sobre Mim", value="/set-sobre <texto> - Define seu 'Sobre Mim'", inline=False)
     embed.add_field(name="<:fone:1440920170251030611> Call", value="/top-tempo - Ranking de tempo em call\n/callstatus - Seu tempo atual em call", inline=False)
     embed.add_field(name="💰 Economia", value="/daily - Recompensa diária\n/mine - Minerar e ganhar souls\n/caça - Caça rápida (5s)\n/caça-longa - Caça longa (12h)\n/balance [membro] - Ver saldo de souls\n/top-souls - Ranking de souls\n/top-level - Ranking de níveis", inline=False)
@@ -509,6 +509,11 @@ async def setup_hook():
         await mod.setup(bot)
     except Exception as e:
         print(f"Erro ao carregar cog mod: {e}")
+    try:
+        frase = importlib.import_module("cogs.frase")
+        await frase.setup(bot)
+    except Exception as e:
+        print(f"Erro ao carregar cog frase: {e}")
 
     update_status.start()
     await bot.tree.sync()
