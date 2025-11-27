@@ -175,11 +175,11 @@ async def slash_help(interaction: discord.Interaction):
         color=discord.Color.blurple(),
     )
     embed.add_field(name="<:membro:1428925668950806558> Perfil", value="/perfil [membro] - Mostra os detalhes do perfil", inline=False)
-    embed.add_field(name="<:papel:1440921269846413475> Mensagens", value="/mensagem <título> <texto> - Cria uma embed simples\n/frase <frase> - Envia uma frase ou poesia", inline=False)
-    embed.add_field(name="<:papel:1440921269846413475> Sobre Mim", value="/set-sobre <texto> - Define seu 'Sobre Mim'", inline=False)
+    embed.add_field(name="<:papel:1440921270366634075> Mensagens", value="/mensagem <título> <texto> - Cria uma embed simples\n/frase <frase> - Envia uma frase ou poesia", inline=False)
+    embed.add_field(name="<:papel:1440921270366634075> Sobre Mim", value="/set-sobre <texto> - Define seu 'Sobre Mim'", inline=False)
     embed.add_field(name="<:fone:1440920170251030611> Call", value="/top-tempo - Ranking de tempo em call\n/callstatus - Seu tempo atual em call", inline=False)
     embed.add_field(name="💰 Economia", value="/daily - Recompensa diária\n/mine - Minerar e ganhar souls\n/caça - Caça rápida (5s)\n/caça-longa - Caça longa (12h)\n/balance [membro] - Ver saldo de souls\n/top-souls - Ranking de souls\n/top-level - Ranking de níveis", inline=False)
-    embed.add_field(name="<:papel:1440921269846413475> Missões", value="/missoes - Ver suas missões\n/claim-missao <número> - Reivindicar recompensa", inline=False)
+    embed.add_field(name="<:papel:1440921270366634075> Missões", value="/missoes - Ver suas missões\n/claim-missao <número> - Reivindicar recompensa", inline=False)
     embed.add_field(name="ℹ️ Info", value="/uptime - Tempo online do bot", inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -209,9 +209,9 @@ async def slash_perfil(interaction: discord.Interaction, membro: discord.Member 
     embed.add_field(name="<:ponto1:1430319216787066962> Conta criada em:", value=membro.created_at.strftime("%d/%m/%Y"), inline=True)
     joined_at = membro.joined_at.strftime("%d/%m/%Y") if membro.joined_at else "Desconhecido"
     embed.add_field(name="<:event:1428924599990616186>  Entrou no servidor:", value=joined_at, inline=True)
-    embed.add_field(name="<:papel:1440921269846413475> Sobre Mim:", value=sobre, inline=False)
+    embed.add_field(name="<:papel:1440921270366634075> Sobre Mim:", value=sobre, inline=False)
     embed.add_field(name="<:fone:1440920170251030611> Tempo atual em call:", value=tempo_atual, inline=True)
-    embed.add_field(name="<:relogio:1440920120288608346 > Tempo total acumulado:", value=tempo_total_fmt, inline=True)
+    embed.add_field(name="<:relogio:1440920120288608346> Tempo total acumulado:", value=tempo_total_fmt, inline=True)
 
     try:
         user = await bot.fetch_user(membro.id)
