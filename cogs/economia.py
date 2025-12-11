@@ -199,6 +199,137 @@ class Economia(commands.Cog):
         embed.set_footer(text="Aeternum Exilium • Sistema de Economia")
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="pay", description="Pague outro membro. Requer confirmação do destinatário.")
+    @app_commands.describe(membro="Membro destinatário", valor="Quantidade de almas a enviar")
+    async def pay(self, interaction: discord.Interaction, membro: discord.Member, valor: int):
+        # Validações iniciais
+        if membro.bot:
+            await interaction.response.send_message("❌ Você não pode enviar almas para bots.", ephemeral=True)
+            return
+
+        if membro.id == interaction.user.id:
+            await interaction.response.send_message("❌ Você não pode enviar almas para si mesmo.", ephemeral=True)
+            return
+
+        if valor <= 0:
+            await interaction.response.send_message("❌ O valor deve ser maior que zero.", ephemeral=True)
+            return
+
+        sender_uid = self.ensure_user(interaction.user.id)
+        db = self.bot.db()
+        balance = db.get(sender_uid, {}).get("soul", 0)
+
+        if balance < valor:
+            await interaction.response.send_message("❌ Saldo insuficiente.", ephemeral=True)
+            return
+
+        # Criar view de confirmação para o destinatário
+        class TransferConfirmView(discord.ui.View):
+            def __init__(self, bot, sender_id: int, recipient_id: int, amount: int, timeout: int = 120):
+                super().__init__(timeout=timeout)
+                self.bot = bot
+                self.sender_id = sender_id
+                self.recipient_id = recipient_id
+                self.amount = amount
+                self.confirmed = False
+
+            def disable_all_items(self):
+                """Compat shim: desabilita todos os itens do view."""
+                for item in list(self.children):
+                    try:
+                        item.disabled = True
+                    except Exception:
+                        pass
+
+            @discord.ui.button(label="Confirmar Transferência", style=discord.ButtonStyle.success)
+            async def confirm(self, interaction_button: discord.Interaction, button: discord.ui.Button):
+                if interaction_button.user.id != self.recipient_id:
+                    await interaction_button.response.send_message("Somente o destinatário pode confirmar esta transferência.", ephemeral=True)
+                    return
+
+                # Recarregar DB e checar saldo do remetente novamente
+                db_local = self.bot.db()
+                sender_uid_local = str(self.sender_id)
+                recipient_uid_local = str(self.recipient_id)
+
+                if sender_uid_local not in db_local:
+                    await interaction_button.response.send_message("❌ Dados do remetente não encontrados.", ephemeral=True)
+                    self.disable_all_items()
+                    try:
+                        await interaction_button.message.edit(view=self)
+                    except:
+                        pass
+                    return
+
+                if db_local[sender_uid_local].get("soul", 0) < self.amount:
+                    await interaction_button.response.send_message("❌ Transferência falhou: remetente não tem saldo suficiente.", ephemeral=True)
+                    self.disable_all_items()
+                    try:
+                        await interaction_button.message.edit(view=self)
+                    except:
+                        pass
+                    return
+
+                # Garantir que o destinatário possui entrada no DB
+                if recipient_uid_local not in db_local:
+                    db_local[recipient_uid_local] = {
+                        "sobre": None,
+                        "tempo_total": 0,
+                        "soul": 0,
+                        "xp": 0,
+                        "level": 1,
+                        "last_daily": None,
+                        "last_mine": None,
+                        "mine_streak": 0,
+                        "daily_streak": 0,
+                        "last_caca": None,
+                        "caca_streak": 0,
+                        "caca_longa_ativa": None,
+                        "missoes": [],
+                        "missoes_completas": []
+                    }
+
+                # Efetuar transferência
+                db_local[sender_uid_local]["soul"] = db_local[sender_uid_local].get("soul", 0) - self.amount
+                db_local[recipient_uid_local]["soul"] = db_local[recipient_uid_local].get("soul", 0) + self.amount
+                self.bot.save_db(db_local)
+
+                self.confirmed = True
+                self.disable_all_items()
+                try:
+                    await interaction_button.response.send_message(f"✅ Transferência de **{self.amount:,}** almas confirmada por {interaction_button.user.mention}.")
+                except:
+                    pass
+                try:
+                    await interaction_button.message.edit(view=self)
+                except:
+                    pass
+
+        view = TransferConfirmView(self.bot, interaction.user.id, membro.id, valor)
+
+        embed = discord.Embed(
+            title="🔁 Pedido de Transferência",
+            description=f"{interaction.user.mention} quer enviar **{valor:,}** almas para {membro.mention}.",
+            color=discord.Color.blurple()
+        )
+        embed.set_footer(text="Clique em 'Confirmar Transferência' para aceitar. (2 minutos)")
+
+        await interaction.response.send_message(embed=embed, view=view)
+
+        # Aguardar confirmação; se não confirmado em tempo, desabilitar botões e notificar remetente
+        await view.wait()
+
+        if not view.confirmed:
+            try:
+                view.disable_all_items()
+                await interaction.edit_original_response(view=view)
+            except:
+                pass
+            try:
+                await interaction.followup.send("❌ A transferência não foi confirmada a tempo.", ephemeral=True)
+            except:
+                pass
+
     @app_commands.command(name="mine", description="Mine e ganhe almas! (Cooldown: 60s)")
     async def mine(self, interaction: discord.Interaction):
         uid = self.ensure_user(interaction.user.id)

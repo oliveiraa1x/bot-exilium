@@ -515,6 +515,13 @@ async def setup_hook():
     except Exception as e:
         print(f"Erro ao carregar cog frase: {e}")
 
+    # Carregar cog de combate RPG
+    try:
+        rpg = importlib.import_module("cogs.rpg_combate")
+        await rpg.setup(bot)
+    except Exception as e:
+        print(f"Erro ao carregar cog rpg_combate: {e}")
+
     update_status.start()
     await bot.tree.sync()
 
