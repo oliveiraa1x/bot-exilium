@@ -3,6 +3,7 @@
 import discord
 import json
 import random
+import datetime
 from pathlib import Path
 from discord.ext import commands
 from discord import app_commands
@@ -360,7 +361,64 @@ class RPGCombate(commands.Cog):
     @app_commands.command(name="combate", description="Inicie um combate contra um mob de RPG!")
     async def combate(self, interaction: discord.Interaction):
         """Inicia um combate contra um mob aleatório (lobo ou urso)"""
-        
+        # Cooldown de 30 minutos por usuário
+        try:
+            uid = str(interaction.user.id)
+            db = self.bot.db() if hasattr(self, 'bot') else interaction.client.db()
+            now = datetime.datetime.now()
+            cooldown = 30 * 60  # 30 minutos em segundos
+            last = None
+            if uid in db:
+                last = db[uid].get("last_combate")
+
+            if last:
+                try:
+                    last_dt = datetime.datetime.fromisoformat(last)
+                    elapsed = (now - last_dt).total_seconds()
+                    if elapsed < cooldown:
+                        remaining = int(cooldown - elapsed)
+                        minutes = remaining // 60
+                        seconds = remaining % 60
+                        embed = discord.Embed(
+                            title="⏳ Cooldown de Combate",
+                            description=f"Você precisa aguardar **{minutes}m {seconds}s** para iniciar outro combate.",
+                            color=discord.Color.orange()
+                        )
+                        await interaction.response.send_message(embed=embed, ephemeral=True)
+                        return
+                except Exception:
+                    # se falhar ao parsear, ignore e permita o combate
+                    pass
+
+            # Registrar início do combate (prevenindo race conditions de starts simultâneos)
+            if uid not in db:
+                db[uid] = {
+                    "sobre": None,
+                    "tempo_total": 0,
+                    "soul": 0,
+                    "xp": 0,
+                    "level": 1,
+                    "last_daily": None,
+                    "last_mine": None,
+                    "mine_streak": 0,
+                    "daily_streak": 0,
+                    "last_caca": None,
+                    "caca_streak": 0,
+                    "caca_longa_ativa": None,
+                    "missoes": [],
+                    "missoes_completas": []
+                }
+            db[uid]["last_combate"] = now.isoformat()
+            # salvar imediatamente
+            if hasattr(self, 'bot'):
+                self.bot.save_db(db)
+            else:
+                interaction.client.save_db(db)
+
+        except Exception:
+            # Se algo falhar no check de cooldown, permitir o combate mas não bloquear
+            pass
+
         # Escolhe aleatoriamente entre lobo e urso
         mob_type = random.choice(list(MOBS.keys()))
         
