@@ -377,29 +377,21 @@ async def slash_uptime(interaction: discord.Interaction):
 async def update_status():
     if not bot.is_ready():
         return
+
     base_status = next(status_cycle)
 
-    if bot.active_users:
-        user_id = next(iter(bot.active_users))
-        start = bot.call_times.get(user_id, datetime.datetime.now())
-        tempo = format_elapsed(datetime.datetime.now() - start)
-        desired = f"{base_status} "
-        if getattr(bot, '_last_presence', None) != desired:
-            try:
-                await bot.change_presence(activity=discord.Game(name=desired))
-                bot._last_presence = desired
-            except Exception:
-                # Ignore errors (rate limits will be handled by Discord library)
-                pass
-        return
-
+    # Mostrar apenas a mensagem base do status (sem contar tempo em call)
     desired = base_status
+
     if getattr(bot, '_last_presence', None) != desired:
         try:
-            await bot.change_presence(activity=discord.Game(name=base_status))
+            await bot.change_presence(
+                activity=discord.Game(name=desired)
+            )
             bot._last_presence = desired
         except Exception:
             pass
+
 
 
 @bot.event
@@ -466,6 +458,10 @@ def update_missao_progresso(db: dict, uid: str, tipo: str, quantidade: int = 1):
 
 @bot.event
 async def on_voice_state_update(member, before, after):
+    # Ignorar bots (inclui o próprio bot)
+    if getattr(member, "bot", False):
+        return
+
     joined_channel = after.channel and not before.channel
     left_channel = before.channel and not after.channel
 
@@ -487,11 +483,12 @@ async def on_voice_state_update(member, before, after):
 
         db, uid = ensure_user_record(member.id)
         db[uid]["tempo_total"] = db[uid].get("tempo_total", 0) + elapsed
-        
+
         # Atualizar progresso de missão de call
         update_missao_progresso(db, uid, "call", elapsed)
-        
+
         bot.save_db(db)
+
 
 
 @bot.event
@@ -521,6 +518,12 @@ async def setup_hook():
         await rpg.setup(bot)
     except Exception as e:
         print(f"Erro ao carregar cog rpg_combate: {e}")
+
+    try:
+        stay_voice = importlib.import_module("cogs.stay_voice")
+        await stay_voice.setup(bot)
+    except Exception as e:
+        print(f"Erro ao carregar cog stay_voice: {e}")
 
     update_status.start()
     await bot.tree.sync()
