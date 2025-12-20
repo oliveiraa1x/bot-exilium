@@ -1,4 +1,4 @@
-# Arquivo de dados - não commitar para preservar dados dos membros
+# Arquivo de dados - cada ambiente (local/SquareCloud) mantém seu próprio
 data/db.json
 
 # Environment variables
