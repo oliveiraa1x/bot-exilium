@@ -19,7 +19,7 @@ def _resolve_load_dotenv():
             "Dependência ausente: python-dotenv. "
             "Instale-a conforme descrito no requirements.txt."
         ) from exc
-
+  
 
 load_dotenv = _resolve_load_dotenv()
 

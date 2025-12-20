@@ -1,0 +1,20 @@
+{
+  "123456789012345678": {
+    "sobre": "Exemplo de perfil",
+    "tempo_total": 0,
+    "soul": 1000,
+    "xp": 500,
+    "level": 3,
+    "last_daily": null,
+    "last_mine": null,
+    "mine_streak": 0,
+    "daily_streak": 0,
+    "last_caca": null,
+    "caca_streak": 0,
+    "caca_longa_ativa": null,
+    "trabalho_atual": "programador",
+    "last_trabalho": null,
+    "missoes": [],
+    "missoes_completas": []
+  }
+}

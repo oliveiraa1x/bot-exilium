@@ -12,7 +12,8 @@ Bot Discord completo para **Aeternum Exilium** com sistema de economia, níveis,
 - 🎧 **Tracking de Call** - Acompanhe tempo em chamadas de voz
 - ⛏️ **Mineração** - Mine recursos e ganhe souls
 - 🌲 **Sistema de Caça** - Caça rápida e caça longa por almas
- - ⚔️ **Mini Game — Combate RPG** - Combata mobs com botões (recompensa: +100 souls por vitória)
+- 💼 **Sistema de Trabalho** - Escolha uma profissão e trabalhe por recompensas
+- ⚔️ **Mini Game — Combate RPG** - Combata mobs com botões (recompensa: +100 souls por vitória)
 
 ---
 
@@ -47,7 +48,9 @@ python main.py
 | `/mine`             | Minerar e ganhar souls (10-50 souls)  | 60s      |
 | `/caça`             | Caça rápida (15-60 souls)             | 2min     |
 | `/caça-longa`       | Caça longa de 12h (200-500 souls)     | 12h      |
-| `/balance [membro]` | Ver saldo de souls e XP               | -        |
+| `/escolher-trabalho`| Escolher profissão para trabalhar     | -        |
+| `/trabalhar`        | Trabalhar e ganhar souls + XP         | 1h       |
+| `/balance [membro]` | Ver saldo de souls, XP e profissão    | -        |
 | `/pay`              | Pague outro membro (requer confirmação) | -        |
 | `/top-souls`        | Ranking de souls                      | -        |
 | `/top-level`        | Ranking de níveis                     | -        |
@@ -92,11 +95,12 @@ Ganhe souls através de:
 - ✅ Daily rewards
 - ⛏️ Mineração
 - 🌲 Caça (rápida e longa)
+- 💼 Trabalho (profissões)
 - 🎯 Missões completas
 
 ### Sistema de Níveis
 
-Ganhe **XP** enviando mensagens, fazendo daily, minerando, caçando ou completando missões.
+Ganhe **XP** enviando mensagens, fazendo daily, minerando, caçando, trabalhando ou completando missões.
 
 **Fórmula:** XP necessária aumenta 50% a cada nível
 
@@ -125,9 +129,50 @@ Ganhe **XP** enviando mensagens, fazendo daily, minerando, caçando ou completan
 - Notificação automática ao terminar
 - Maiores chances de itens raros (15-20%)
 
+**Trabalho:**
+
+- 50-150 souls + 40-130 XP (varia por profissão)
+- Cooldown: 1 hora
+- 10 profissões diferentes disponíveis
+
 ---
 
-## 🕹️ Mini Game — Combate RPG
+## � Sistema de Trabalho
+
+Escolha uma profissão e trabalhe para ganhar souls e XP regularmente!
+
+### Profissões Disponíveis
+
+| Profissão      | Souls/Trabalho | XP/Trabalho | Descrição                                |
+| -------------- | -------------- | ----------- | ---------------------------------------- |
+| 💻 Programador | 80-120         | 70-100      | Desenvolva sistemas e ganhe boas recompensas! |
+| ⚕️ Médico      | 100-150        | 80-120      | Cure os feridos e seja bem recompensado! |
+| 🔧 Engenheiro  | 85-130         | 75-110      | Construa e projete grandes obras!        |
+| 📚 Professor   | 70-110         | 90-130      | Ensine e ganhe muita experiência!        |
+| 🎨 Pintor      | 60-100         | 50-80       | Crie obras de arte e seja recompensado!  |
+| 🚪 Porteiro    | 50-80          | 40-70       | Proteja a entrada e ganhe sua recompensa! |
+| 👨‍🍳 Cozinheiro | 65-105         | 55-85       | Prepare deliciosas refeições!            |
+| 🚗 Motorista   | 55-90          | 45-75       | Transporte pessoas e mercadorias!        |
+| 🎵 Músico      | 60-95          | 70-100      | Encante com sua música!                  |
+| 🏪 Comerciante | 75-115         | 60-90       | Venda produtos e lucre!                  |
+
+### Como Funciona
+
+1. **Escolha sua Profissão:** Use `/escolher-trabalho` para ver todas as opções e escolher
+2. **Trabalhe:** Use `/trabalhar` para trabalhar e receber suas recompensas
+3. **Cooldown:** Aguarde 1 hora entre cada trabalho
+4. **Mudança:** Pode trocar de profissão a qualquer momento
+
+### Benefícios
+
+- ⏰ **Rendimento Passivo** - Ganhe souls regularmente
+- ⭐ **Experiência** - Suba de nível mais rápido
+- 💼 **Diversidade** - 10 profissões com recompensas diferentes
+- 🎯 **Estratégia** - Escolha a profissão que melhor se adapta ao seu estilo
+
+---
+
+## �🕹️ Mini Game — Combate RPG
 
 - Comando: `/combate`
 - Descrição: Inicia um combate contra um mob (lobo ou urso). O combate usa uma View com botões interativos para `Ataque`, `Defesa` e `Ataque Duplo`.
