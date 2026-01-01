@@ -1,1 +1,175 @@
-{}
+﻿{
+  "_economia": {
+    "raridades": {
+      "comum": {
+        "valor_multiplicador": 1.0
+      },
+      "raro": {
+        "valor_multiplicador": 1.6
+      },
+      "epico": {
+        "valor_multiplicador": 2.4
+      },
+      "lendario": {
+        "valor_multiplicador": 3.5
+      },
+      "ancestral": {
+        "valor_multiplicador": 5.0
+      }
+    },
+    "loja_items": {
+      "pocao_pequena": {
+        "nome": "Poção Pequena",
+        "emoji": "🧪",
+        "descricao": "Cura simples para aventuras rápidas.",
+        "valor": 50,
+        "raridade": "comum",
+        "tipo": "consumivel"
+      },
+      "lootbox_nivel1": {
+        "nome": "Baú Iniciante",
+        "emoji": "📦",
+        "descricao": "Lootbox básica com itens iniciais e moedas",
+        "valor": 500,
+        "raridade": "comum",
+        "tipo": "lootbox",
+        "nivel": 1,
+        "item_id": "lootbox_nivel1"
+      },
+      "lootbox_nivel2": {
+        "nome": "Baú Raro",
+        "emoji": "🎁",
+        "descricao": "Lootbox com chance maior de itens raros.",
+        "valor": 2000,
+        "raridade": "raro",
+        "tipo": "lootbox",
+        "nivel": 2,
+        "item_id": "lootbox_nivel2"
+      },
+      "lootbox_nivel3": {
+        "nome": "Baú Aventureiro",
+        "emoji": "🧭",
+        "descricao": "Lootbox reforçada para exploradores.",
+        "valor": 5000,
+        "raridade": "epico",
+        "tipo": "lootbox",
+        "nivel": 3,
+        "item_id": "lootbox_nivel3"
+      },
+      "lootbox_nivel4": {
+        "nome": "Baú Lendário",
+        "emoji": "⭐",
+        "descricao": "Lootbox com recompensas lendárias",
+        "valor": 10000,
+        "raridade": "lendario",
+        "tipo": "lootbox",
+        "nivel": 4,
+        "item_id": "lootbox_nivel4"
+      },
+      "chave_forja": {
+        "nome": "Chave de Forja",
+        "emoji": "🗝️",
+        "descricao": "Material especial usado em forjas lendárias.",
+        "valor": 250,
+        "raridade": "epico",
+        "tipo": "especial"
+      }
+    },
+    "itens_craft": {
+      "barra_ferro": {
+        "nome": "Barra de Ferro",
+        "emoji": "⛓️",
+        "raridade": "comum",
+        "ingredientes": {
+          "minerio_ferro": 3
+        }
+      },
+      "lingote_mistico": {
+        "nome": "Lingote Místico",
+        "emoji": "🔷",
+        "raridade": "raro",
+        "ingredientes": {
+          "minerio_ferro": 2,
+          "cristal_arcano": 1
+        }
+      }
+    },
+    "itens_forja": {
+      "espada_lendaria": {
+        "nome": "Espada Lendária",
+        "emoji": "⚔️",
+        "raridade": "lendario",
+        "custo_almas": 800,
+        "ingredientes": {
+          "barra_ferro": 5,
+          "chave_forja": 1,
+          "lingote_mistico": 2
+        },
+        "taxa_falha": 0.15
+      }
+    },
+    "itens_passivos": {
+      "colar_sorte": {
+        "nome": "Colar da Sorte",
+        "emoji": "🔱",
+        "raridade": "raro",
+        "bonus_souls": 10
+      }
+    },
+    "lootbox_recompensas": {
+      "nivel1": {
+        "comum": [
+          {"tipo": "item", "id": "pocao_pequena", "chance": 40},
+          {"tipo": "moeda", "min": 500, "max": 1000, "chance": 60}
+        ],
+        "raro": [
+          {"tipo": "item", "id": "chave_forja", "chance": 20},
+          {"tipo": "moeda", "min": 1500, "max": 2000, "chance": 30}
+        ]
+      },
+      "nivel2": {
+        "comum": [
+          {"tipo": "item", "id": "pocao_pequena", "chance": 30},
+          {"tipo": "moeda", "min": 1000, "max": 2000, "chance": 40}
+        ],
+        "raro": [
+          {"tipo": "item", "id": "colar_sorte", "chance": 35},
+          {"tipo": "moeda", "min": 2000, "max": 3500, "chance": 50}
+        ],
+        "epico": [
+          {"tipo": "moeda", "min": 3500, "max": 4500, "chance": 15}
+        ]
+      },
+      "nivel3": {
+        "comum": [
+          {"tipo": "moeda", "min": 2000, "max": 3000, "chance": 20}
+        ],
+        "raro": [
+          {"tipo": "item", "id": "colar_sorte", "chance": 40},
+          {"tipo": "moeda", "min": 3000, "max": 5000, "chance": 40}
+        ],
+        "epico": [
+          {"tipo": "moeda", "min": 5000, "max": 8000, "chance": 30}
+        ],
+        "lendario": [
+          {"tipo": "moeda", "min": 8000, "max": 9500, "chance": 10}
+        ]
+      },
+      "nivel4": {
+        "comum": [
+          {"tipo": "moeda", "min": 3000, "max": 4000, "chance": 10}
+        ],
+        "raro": [
+          {"tipo": "item", "id": "colar_sorte", "chance": 35},
+          {"tipo": "moeda", "min": 5000, "max": 8000, "chance": 35}
+        ],
+        "epico": [
+          {"tipo": "moeda", "min": 8000, "max": 12000, "chance": 25}
+        ],
+        "lendario": [
+          {"tipo": "moeda", "min": 12000, "max": 15000, "chance": 15}
+        ]
+      }
+    }
+  }
+}

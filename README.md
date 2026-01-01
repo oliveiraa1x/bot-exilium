@@ -55,6 +55,18 @@ python main.py
 | `/top-souls`        | Ranking de souls                      | -        |
 | `/top-level`        | Ranking de níveis                     | -        |
 
+### 🏪 Loja e Inventário
+
+| Comando                 | Descrição                                      |
+| ----------------------- | ---------------------------------------------- |
+| `/loja`                 | Lista itens disponíveis por categoria          |
+| `/comprar <item> [qtd]` | Compra itens usando souls                      |
+| `/vender <item> [qtd]`  | Vende itens e recebe souls                     |
+| `/inventario`           | Mostra seus itens e almas                      |
+| `/craft <item>`         | (Em dev) Crafta itens com materiais            |
+| `/forjar <item>`        | Forja armas usando almas e ingredientes        |
+| `/abrir-lootbox`        | Abre uma lootbox que você já possui            |
+
 ### 👤 Perfil
 
 | Comando              | Descrição                            |
@@ -135,9 +147,20 @@ Ganhe **XP** enviando mensagens, fazendo daily, minerando, caçando, trabalhando
 - Cooldown: 1 hora
 - 10 profissões diferentes disponíveis
 
+### Lootboxes na Loja
+
+| ID               | Nome             | Raridade | Valor (souls) |
+| ---------------- | ---------------- | -------- | ------------- |
+| `lootbox_nivel1` | Baú Iniciante    | comum    | 500           |
+| `lootbox_nivel2` | Baú Raro         | raro     | 2 000         |
+| `lootbox_nivel3` | Baú Aventureiro  | épico    | 5 000         |
+| `lootbox_nivel4` | Baú Lendário     | lendário | 10 000        |
+
+Use `/comprar item:<id>` para adquirir e `/abrir-lootbox nivel:<n>` para abrir (nível = 1-4 conforme a tabela).
+
 ---
 
-## � Sistema de Trabalho
+## 💼 Sistema de Trabalho
 
 Escolha uma profissão e trabalhe para ganhar souls e XP regularmente!
 
@@ -172,7 +195,7 @@ Escolha uma profissão e trabalhe para ganhar souls e XP regularmente!
 
 ---
 
-## �🕹️ Mini Game — Combate RPG
+## 🕹️ Mini Game — Combate RPG
 
 - Comando: `/combate`
 - Descrição: Inicia um combate contra um mob (lobo ou urso). O combate usa uma View com botões interativos para `Ataque`, `Defesa` e `Ataque Duplo`.

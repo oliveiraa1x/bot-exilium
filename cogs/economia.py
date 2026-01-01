@@ -45,7 +45,7 @@ def get_xp_for_next_level(level: int) -> int:
 class Economia(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.mine_cooldown = 300  # 5 minutos (300 segundos) entre minerações
+        self.mine_cooldown = 60  # 60 segundos entre minerações
         self.daily_cooldown = 86400  # 24 horas
         self.caca_cooldown = 120  # 2 minutos entre caças rápidas
         self.caca_longa_duration = 43200  # 12 horas em segundos
@@ -138,49 +138,47 @@ class Economia(commands.Cog):
         self.check_cacas_longas.start()
 
     def ensure_user(self, user_id: int):
-        """Garante que o usuário existe no banco de dados"""
+        """Garante que o usuário existe no banco de dados e possui campos padrão"""
         uid = str(user_id)
         db = self.bot.db()
+
+        defaults = {
+            "sobre": None,
+            "tempo_total": 0,
+            "soul": 0,
+            "xp": 0,
+            "level": 1,
+            "last_daily": None,
+            "last_mine": None,
+            "mine_streak": 0,
+            "daily_streak": 0,
+            "last_caca": None,
+            "caca_streak": 0,
+            "caca_longa_ativa": None,
+            "trabalho_atual": None,
+            "last_trabalho": None,
+            "missoes": [],
+            "missoes_completas": [],
+            "itens": {},
+            "equipados": {},
+            "last_combate": None,
+                "last_combate": None,
+        }
+
         if uid not in db:
-            db[uid] = {
-                "sobre": None,
-                "tempo_total": 0,
-                "soul": 0,
-                "xp": 0,
-                "level": 1,
-                "last_daily": None,
-                "last_mine": None,
-                "mine_streak": 0,
-                "last_caca": None,
-                "caca_streak": 0,
-                "caca_longa_ativa": None,
-                "trabalho_atual": None,
-                "last_trabalho": None,
-                "missoes": [],
-                "missoes_completas": []
-            }
+            db[uid] = defaults.copy()
             self.bot.save_db(db)
-        else:
-            defaults = {
-                "soul": 0,
-                "xp": 0,
-                "level": 1,
-                "last_daily": None,
-                "last_mine": None,
-                "mine_streak": 0,
-                "daily_streak": 0,
-                "last_caca": None,
-                "caca_streak": 0,
-                "caca_longa_ativa": None,
-                "trabalho_atual": None,
-                "last_trabalho": None,
-                "missoes": [],
-                "missoes_completas": []
-            }
-            for key, value in defaults.items():
-                if key not in db[uid]:
-                    db[uid][key] = value
+            return uid
+
+        updated = False
+        for key, value in defaults.items():
+            if key not in db[uid]:
+                db[uid][key] = value
+                updated = True
+
+        if updated:
             self.bot.save_db(db)
+
         return uid
 
     def add_xp(self, user_id: int, amount: int):
@@ -274,7 +272,7 @@ class Economia(commands.Cog):
             description=f"**{interaction.user.mention}** coletou sua recompensa diária!",
             color=discord.Color.gold()
         )
-        embed.add_field(name="💰 Almas ganhas", value=f"**{bonus_souls}** <:alma:1443647166399909998>", inline=True)
+        embed.add_field(name="💰 Almas ganhas", value=f"**{bonus_souls}** <:alma:1456309061057511535>", inline=True)
         embed.add_field(name="⭐ XP ganho", value=f"**{bonus_xp}** XP", inline=True)
         embed.add_field(name="🔥 Streak", value=f"**{streak}** dias consecutivos", inline=True)
         
@@ -460,7 +458,7 @@ class Economia(commands.Cog):
         if rare_chance < 0.05:  # 5% de chance
             rare_bonus = random.randint(100, 300)
             bonus_souls += rare_bonus
-            rare_message = "<:alma:1443647166399909998> **Você encontrou uma gema rara!**"
+            rare_message = "<:alma:1456309061057511535> **Você encontrou uma gema rara!**"
         elif rare_chance < 0.15:  # 10% de chance
             rare_bonus = random.randint(50, 150)
             bonus_souls += rare_bonus
@@ -481,7 +479,7 @@ class Economia(commands.Cog):
         self.bot.save_db(db)
         
         # Emojis aleatórios para a mineração
-        mine_emojis = ["⛏️", "🔨", "<:alma:1443647166399909998>", "⚒️", "🪨"]
+        mine_emojis = ["⛏️", "🔨", "<:alma:1456309061057511535>", "⚒️", "🪨"]
         mine_emoji = random.choice(mine_emojis)
         
         embed = discord.Embed(
@@ -489,7 +487,7 @@ class Economia(commands.Cog):
             description=f"**{interaction.user.mention}** minerou com sucesso!",
             color=discord.Color.blue()
         )
-        embed.add_field(name="💰 Almas ganhas", value=f"**{bonus_souls}** <:alma:1443647166399909998>", inline=True)
+        embed.add_field(name="💰 Almas ganhas", value=f"**{bonus_souls}** <:alma:1456309061057511535>", inline=True)
         embed.add_field(name="⭐ XP ganho", value=f"**{bonus_xp}** XP", inline=True)
         embed.add_field(name="🔥 Streak", value=f"**{streak}** minerações", inline=True)
         
@@ -528,7 +526,7 @@ class Economia(commands.Cog):
             title=f"💰 Carteira de {membro.display_name}",
             color=discord.Color.green()
         )
-        embed.add_field(name="<:alma:1443647166399909998> Almas", value=f"**{souls:,}** <:alma:1443647166399909998>", inline=True)
+        embed.add_field(name="<:alma:1456309061057511535> Almas", value=f"**{souls:,}** <:alma:1456309061057511535>", inline=True)
         embed.add_field(name="⭐ Nível", value=f"**{level}**", inline=True)
         embed.add_field(name="📊 XP", value=f"**{xp:,}** XP", inline=True)
         embed.add_field(
@@ -592,7 +590,7 @@ class Economia(commands.Cog):
                         nome = f"Usuário {uid}"
                 embed.add_field(
                     name=f"{pos}. {nome}",
-                    value=f"**{souls:,}** <:alma:1443647166399909998>",
+                    value=f"**{souls:,}** <:alma:1456309061057511535>",
                     inline=False
                 )
         
@@ -716,7 +714,7 @@ class Economia(commands.Cog):
                 name=f"{status} {idx}. {missao['nome']}",
                 value=f"{missao['descricao']}\n"
                       f"Progresso: **{progresso}/{objetivo}**\n"
-                      f"Recompensa: **{missao['recompensa_soul']}** <:alma:1443647166399909998> + **{missao['recompensa_xp']}** XP",
+                      f"Recompensa: **{missao['recompensa_soul']}** <:alma:1456309061057511535> + **{missao['recompensa_xp']}** XP",
                 inline=False
             )
         
@@ -783,7 +781,7 @@ class Economia(commands.Cog):
             description=f"Você reivindicou a recompensa da missão **{missao['nome']}**!",
             color=discord.Color.green()
         )
-        embed.add_field(name="💰 Almas ganhas", value=f"**{recompensa_soul}** <:alma:1443647166399909998>", inline=True)
+        embed.add_field(name="💰 Almas ganhas", value=f"**{recompensa_soul}** <:alma:1456309061057511535>", inline=True)
         embed.add_field(name="⭐ XP ganho", value=f"**{recompensa_xp}** XP", inline=True)
         
         if leveled_up:
@@ -883,7 +881,7 @@ class Economia(commands.Cog):
             description=f"**{interaction.user.mention}** retornou da floresta escura!",
             color=discord.Color.dark_purple()
         )
-        embed_resultado.add_field(name="💰 Almas ganhas", value=f"**{bonus_souls}** <:alma:1443647166399909998>", inline=True)
+        embed_resultado.add_field(name="💰 Almas ganhas", value=f"**{bonus_souls}** <:alma:1456309061057511535>", inline=True)
         embed_resultado.add_field(name="⭐ XP ganho", value=f"**{bonus_xp}** XP", inline=True)
         embed_resultado.add_field(name="🔥 Streak", value=f"**{streak}** caçadas", inline=True)
         
@@ -1008,7 +1006,7 @@ class Economia(commands.Cog):
             description=f"<@{user_id}> retornou da floresta escura após 12 horas de caçada!",
             color=discord.Color.gold()
         )
-        embed.add_field(name="💰 Almas ganhas", value=f"**{bonus_souls}** <:alma:1443647166399909998>", inline=True)
+        embed.add_field(name="💰 Almas ganhas", value=f"**{bonus_souls}** <:alma:1456309061057511535>", inline=True)
         embed.add_field(name="⭐ XP ganho", value=f"**{bonus_xp}** XP", inline=True)
         
         if rare_message:
@@ -1244,7 +1242,7 @@ class Economia(commands.Cog):
         )
         embed.add_field(
             name="💰 Almas ganhas",
-            value=f"**{souls_ganhos}** <:alma:1443647166399909998>",
+            value=f"**{souls_ganhos}** <:alma:1456309061057511535>",
             inline=True
         )
         embed.add_field(

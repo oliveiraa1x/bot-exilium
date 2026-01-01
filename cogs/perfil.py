@@ -139,7 +139,7 @@ class Perfil(commands.Cog):
 
         # SOBRE MIM
         embed.add_field(
-            name="<:papel:1440921269846413475> Sobre Mim:",
+            name="<:papel:1456311222319971998> Sobre Mim:",
             value=sobre,
             inline=False
         )
@@ -147,7 +147,7 @@ class Perfil(commands.Cog):
         # TEMPO EM CALL
         rank_call_text = f"🏆 **#{rank_call}**" if rank_call else "❌ Sem ranking"
         embed.add_field(
-            name="<:fone:1440920170251030611> Tempo em Call",
+            name="<:microfone:1456311268439883920> Tempo em Call",
             value=f"**Atual:** {tempo_atual}\n**Total:** {tempo_total_fmt}\n**Rank:** {rank_call_text}",
             inline=True
         )

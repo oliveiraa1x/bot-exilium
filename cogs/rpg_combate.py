@@ -1,72 +1,70 @@
 # rpg_combate.py - Mini game de RPG com combate contra mobs integrado com economia
 
-import discord
-import json
-import random
 import datetime
-from pathlib import Path
-from discord.ext import commands
+import random
+
+import discord
 from discord import app_commands
-
-# ==============================
-# Sistema de Banco de Dados para Economia
-# ==============================
-ECONOMIA_DB_PATH = Path(__file__).parent.parent / "data" / "economia.json"
+from discord.ext import commands
 
 
-def ensure_economia_db_file() -> None:
-    """Garante que o arquivo de banco de dados de economia existe"""
-    ECONOMIA_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not ECONOMIA_DB_PATH.exists():
-        ECONOMIA_DB_PATH.write_text("{}", encoding="utf-8")
+DEFAULT_USER_FIELDS = {
+    "sobre": None,
+    "tempo_total": 0,
+    "soul": 0,
+    "xp": 0,
+    "level": 1,
+    "last_daily": None,
+    "last_mine": None,
+    "mine_streak": 0,
+    "daily_streak": 0,
+    "last_caca": None,
+    "caca_streak": 0,
+    "caca_longa_ativa": None,
+    "trabalho_atual": None,
+    "last_trabalho": None,
+    "missoes": [],
+    "missoes_completas": [],
+    "itens": {},
+    "equipados": {},
+    "last_combate": None,
+}
 
 
-def load_economia_db() -> dict:
-    """Carrega o banco de dados de economia"""
-    ensure_economia_db_file()
-    try:
-        with ECONOMIA_DB_PATH.open("r", encoding="utf-8") as fp:
-            return json.load(fp)
-    except json.JSONDecodeError:
-        return {}
-
-
-def save_economia_db(data: dict) -> None:
-    """Salva o banco de dados de economia"""
-    ensure_economia_db_file()
-    with ECONOMIA_DB_PATH.open("w", encoding="utf-8") as fp:
-        json.dump(data, fp, ensure_ascii=False, indent=2)
-
-
-def ensure_user_economia(user_id: int):
-    """Garante que o usuário existe no banco de dados de economia"""
+def ensure_user_shared(bot: commands.Bot, user_id: int) -> str:
+    """Garante que o usuário existe no db.json compartilhado (fallback sem Economia)."""
     uid = str(user_id)
-    db = load_economia_db()
+    db = bot.db()
     if uid not in db:
-        db[uid] = {
-            "soul": 0,
-            "xp": 0,
-            "level": 1,
-            "last_daily": None,
-            "last_mine": None,
-            "mine_streak": 0,
-            "daily_streak": 0,
-            "last_caca": None,
-            "caca_streak": 0,
-            "caca_longa_ativa": None,
-            "missoes": [],
-            "missoes_completas": []
-        }
-        save_economia_db(db)
+        db[uid] = DEFAULT_USER_FIELDS.copy()
+        bot.save_db(db)
+        return uid
+
+    changed = False
+    for key, value in DEFAULT_USER_FIELDS.items():
+        if key not in db[uid]:
+            db[uid][key] = value
+            changed = True
+    if changed:
+        bot.save_db(db)
     return uid
 
 
-def add_soul(user_id: int, amount: int):
-    """Adiciona almas (soul) ao usuário"""
-    uid = ensure_user_economia(user_id)
-    db = load_economia_db()
+def add_soul_shared(bot: commands.Bot, user_id: int, amount: int) -> None:
+    """Adiciona almas usando o db.json compartilhado ou a cog Economia se disponível."""
+    economia_cog = bot.get_cog("Economia")
+    if economia_cog and hasattr(economia_cog, "ensure_user") and hasattr(economia_cog, "add_soul"):
+        try:
+            economia_cog.ensure_user(user_id)
+            economia_cog.add_soul(user_id, amount)
+            return
+        except Exception:
+            pass
+
+    uid = ensure_user_shared(bot, user_id)
+    db = bot.db()
     db[uid]["soul"] = db[uid].get("soul", 0) + amount
-    save_economia_db(db)
+    bot.save_db(db)
 
 
 # ==============================
@@ -96,8 +94,9 @@ MOBS = {
 # View com os Botões de Combate
 # ==============================
 class CombateButtons(discord.ui.View):
-    def __init__(self, user_id: int, mob_type: str, timeout: float = 600.0):
+    def __init__(self, bot: commands.Bot, user_id: int, mob_type: str, timeout: float = 600.0):
         super().__init__(timeout=timeout)
+        self.bot = bot
         self.user_id = user_id
         self.mob_type = mob_type
         self.mob = MOBS[mob_type].copy()
@@ -230,7 +229,7 @@ class CombateButtons(discord.ui.View):
         # Barra de vida do jogador
         vida_jogador_str = "❤️ " * self.player_vida + "🖤 " * (3 - self.player_vida)
         embed.add_field(
-            name="<:membro:1428925668950806558> Sua Vida",
+            name="<:membro:1456311222315253910> Sua Vida",
             value=f"{vida_jogador_str} ({self.player_vida}/3)",
             inline=False
         )
@@ -266,33 +265,9 @@ class CombateButtons(discord.ui.View):
         
         # Adiciona almas ao jogador no DB principal do bot
         try:
-            db = interaction.client.db()
-            uid = str(self.user_id)
-            if uid not in db:
-                db[uid] = {
-                    "sobre": None,
-                    "tempo_total": 0,
-                    "soul": 0,
-                    "xp": 0,
-                    "level": 1,
-                    "last_daily": None,
-                    "last_mine": None,
-                    "mine_streak": 0,
-                    "daily_streak": 0,
-                    "last_caca": None,
-                    "caca_streak": 0,
-                    "caca_longa_ativa": None,
-                    "missoes": [],
-                    "missoes_completas": []
-                }
-            db[uid]["soul"] = db[uid].get("soul", 0) + 100
-            interaction.client.save_db(db)
+            add_soul_shared(self.bot, self.user_id, 100)
         except Exception:
-            # Se algo der errado ao salvar no DB principal, tentar fallback no arquivo local
-            try:
-                add_soul(self.user_id, 100)
-            except Exception:
-                pass
+            pass
         
         embed.add_field(
             name="💰 Recompensa",
@@ -363,13 +338,11 @@ class RPGCombate(commands.Cog):
         """Inicia um combate contra um mob aleatório (lobo ou urso)"""
         # Cooldown de 30 minutos por usuário
         try:
-            uid = str(interaction.user.id)
-            db = self.bot.db() if hasattr(self, 'bot') else interaction.client.db()
+            uid = ensure_user_shared(self.bot, interaction.user.id)
+            db = self.bot.db()
             now = datetime.datetime.now()
             cooldown = 30 * 60  # 30 minutos em segundos
-            last = None
-            if uid in db:
-                last = db[uid].get("last_combate")
+            last = db.get(uid, {}).get("last_combate")
 
             if last:
                 try:
@@ -391,29 +364,9 @@ class RPGCombate(commands.Cog):
                     pass
 
             # Registrar início do combate (prevenindo race conditions de starts simultâneos)
-            if uid not in db:
-                db[uid] = {
-                    "sobre": None,
-                    "tempo_total": 0,
-                    "soul": 0,
-                    "xp": 0,
-                    "level": 1,
-                    "last_daily": None,
-                    "last_mine": None,
-                    "mine_streak": 0,
-                    "daily_streak": 0,
-                    "last_caca": None,
-                    "caca_streak": 0,
-                    "caca_longa_ativa": None,
-                    "missoes": [],
-                    "missoes_completas": []
-                }
             db[uid]["last_combate"] = now.isoformat()
             # salvar imediatamente
-            if hasattr(self, 'bot'):
-                self.bot.save_db(db)
-            else:
-                interaction.client.save_db(db)
+            self.bot.save_db(db)
 
         except Exception:
             # Se algo falhar no check de cooldown, permitir o combate mas não bloquear
@@ -423,7 +376,7 @@ class RPGCombate(commands.Cog):
         mob_type = random.choice(list(MOBS.keys()))
         
         # Cria a view com os botões
-        view = CombateButtons(interaction.user.id, mob_type)
+        view = CombateButtons(self.bot, interaction.user.id, mob_type)
         
         # Cria o embed inicial
         embed = discord.Embed(

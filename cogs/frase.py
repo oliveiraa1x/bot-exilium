@@ -17,12 +17,12 @@ class Frase(commands.Cog):
 
         # Embed que irá para o chat
         embed = discord.Embed(
-            title="<:papel:1440921270366634075> Nova frase enviada!",
+            title="<:papel:1456311222319971998> Nova frase enviada!",
             color=discord.Color.blurple()
         )
 
         embed.add_field(
-            name="<:membro:1428925668950806558> Autor:",
+            name="<:membro:1456311222315253910> Autor:",
             value=interaction.user.mention,
             inline=False
         )

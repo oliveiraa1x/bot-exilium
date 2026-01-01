@@ -1,6 +1,15 @@
 # Arquivo de dados - cada ambiente (local/SquareCloud) mantém seu próprio
 data/db.json
 
+# Credenciais e configuração sensível
+config.json
+
+# Certificados e chaves privadas
+certificate.pem
+*.pem
+*.key
+*.crt
+
 # Environment variables
 .env
 *.env

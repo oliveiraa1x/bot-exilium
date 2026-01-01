@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import importlib
 import json
@@ -5,10 +7,13 @@ import os
 import random
 from itertools import cycle
 from pathlib import Path
+from typing import Optional
 
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
+
+from database import DatabaseManager
 
 
 def _resolve_load_dotenv():
@@ -77,7 +82,27 @@ def resolve_token() -> str:
     return token
 
 
+def resolve_mongodb_uri() -> str | None:
+    """Resolve a URI do MongoDB a partir do ambiente ou config.json."""
+    load_dotenv()
+    uri = os.getenv("MONGODB_URI")
+
+    if uri:
+        return uri
+
+    if CONFIG_PATH.exists():
+        with CONFIG_PATH.open("r", encoding="utf-8") as fp:
+            try:
+                cfg = json.load(fp)
+            except json.JSONDecodeError:
+                cfg = {}
+        uri = cfg.get("MONGODB_URI")
+
+    return uri
+
+
 TOKEN = resolve_token()
+MONGODB_URI = resolve_mongodb_uri()
 
 
 # ==============================
@@ -94,13 +119,39 @@ try:
 except Exception:
     pass
 
-# Track last presence to avoid unnecessary change_presence calls
-bot._last_presence: str | None = None
+# Inicializa o gerenciador de banco de dados
+db_manager = DatabaseManager(MONGODB_URI)
 
-bot.call_times: dict[int, datetime.datetime] = {}
-bot.active_users: set[int] = set()
+# Sincroniza dados de economia (raridades, loja, etc) com MongoDB
+def sync_economia_to_db():
+    """Sincroniza dados de economia do db.json para MongoDB."""
+    try:
+        with open(Path(__file__).parent / "data" / "db.json", "r", encoding="utf-8") as fp:
+            local_data = json.load(fp)
+            economia = local_data.get("_economia", {})
+            if economia:
+                db_manager.sync_economia(economia)
+                print("✅ Dados de economia sincronizados com MongoDB")
+    except Exception as e:
+        print(f"⚠️ Erro ao sincronizar economia: {e}")
+
+# Cria funções compatíveis com a API antiga
+def load_db() -> dict:
+    return db_manager.get_compatible_db()
+
+def save_db(data: dict) -> None:
+    # A sincronização é feita automaticamente pelo CompatibleDB
+    pass
+
+bot.db_manager = db_manager
 bot.db = load_db
 bot.save_db = save_db
+
+# Track last presence to avoid unnecessary change_presence calls
+bot._last_presence: Optional[str] = None
+
+bot.call_times: dict = {}
+bot.active_users: set = set()
 
 status_messages = [
     "Aeternum Exilium",
@@ -142,7 +193,10 @@ def ensure_user_record(user_id: int) -> tuple[dict, str]:
             "caca_streak": 0,
             "caca_longa_ativa": None,
             "missoes": [],
-            "missoes_completas": []
+            "missoes_completas": [],
+            "itens": {},
+            "equipados": {},
+            "last_combate": None,
         }
         bot.save_db(db)
     else:
@@ -158,7 +212,10 @@ def ensure_user_record(user_id: int) -> tuple[dict, str]:
             "caca_streak": 0,
             "caca_longa_ativa": None,
             "missoes": [],
-            "missoes_completas": []
+            "missoes_completas": [],
+            "itens": {},
+            "equipados": {},
+            "last_combate": None,
         }
         for key, value in defaults.items():
             if key not in db[uid]:
@@ -171,17 +228,63 @@ def ensure_user_record(user_id: int) -> tuple[dict, str]:
 async def slash_help(interaction: discord.Interaction):
     embed = discord.Embed(
         title="📖 Help Exilium",
-        description="Comandos disponíveis:",
+        description="Você tem 10 categorias e 35+ comandos para explorar.",
         color=discord.Color.blurple(),
     )
-    embed.add_field(name="<:membro:1428925668950806558> Perfil", value="/perfil [membro] - Mostra os detalhes do perfil", inline=False)
-    embed.add_field(name="<:papel:1440921270366634075> Mensagens", value="/mensagem <título> <texto> - Cria uma embed simples\n/frase <frase> - Envia uma frase ou poesia", inline=False)
-    embed.add_field(name="<:papel:1440921270366634075> Sobre Mim", value="/set-sobre <texto> - Define seu 'Sobre Mim'", inline=False)
-    embed.add_field(name="<:fone:1440920170251030611> Call", value="/top-tempo - Ranking de tempo em call\n/callstatus - Seu tempo atual em call", inline=False)
-    embed.add_field(name="💰 Economia", value="/daily - Recompensa diária\n/mine - Minerar e ganhar souls\n/caça - Caça rápida (5s)\n/caça-longa - Caça longa (12h)\n/balance [membro] - Ver saldo de souls\n/top-souls - Ranking de souls\n/top-level - Ranking de níveis", inline=False)
-    embed.add_field(name="<:papel:1440921270366634075> Missões", value="/missoes - Ver suas missões\n/claim-missao <número> - Reivindicar recompensa", inline=False)
-    embed.add_field(name="ℹ️ Info", value="/uptime - Tempo online do bot", inline=False)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    # Coluna 1
+    col1 = (
+        "**<:membro:1456311222315253910> Perfil**\n"
+        "/perfil\n\n"
+        "**<:papel:1456311222319971998> Mensagens**\n"
+        "/mensagem\n"
+        "/frase\n\n"
+        "**<:papel:1456311222319971998> Sobre Mim**\n"
+        "/set-sobre\n\n"
+        "**<:microfone:1456311268439883920> Call**\n"
+        "/top-tempo\n"
+        "/callstatus"
+    )
+    
+    # Coluna 2
+    col2 = (
+        "**💰 Economia**\n"
+        "/daily\n"
+        "/mine\n"
+        "/caça\n"
+        "/caça-longa\n"
+        "/balance\n"
+        "/top-souls\n"
+        "/top-level\n\n"
+        "**<:papel:1456311222319971998> Missões**\n"
+        "/missoes\n"
+        "/claim-missao"
+    )
+    
+    # Coluna 3
+    col3 = (
+        "**🎒 Inventário**\n"
+        "/inventario\n"
+        "/usar\n"
+        "/descartar\n\n"
+        "**🛍️ Loja**\n"
+        "/loja\n"
+        "/comprar\n"
+        "/vender\n"
+        "/abrir-lootbox\n\n"
+        "**⚔️ Combate**\n"
+        "/combate\n"
+        "/ranking-combate\n\n"
+        "**ℹ️ Informações**\n"
+        "/uptime"
+    )
+    
+    embed.add_field(name="📋 Categorias", value=col1, inline=True)
+    embed.add_field(name="　", value=col2, inline=True)
+    embed.add_field(name="　", value=col3, inline=True)
+    
+    embed.set_footer(text="Aeternum Exilium • Use /[comando] para mais detalhes")
+    await interaction.response.send_message(embed=embed)
 
 
 @bot.tree.command(name="perfil", description="Mostra um perfil completo do usuário.")
@@ -202,16 +305,16 @@ async def slash_perfil(interaction: discord.Interaction, membro: discord.Member 
         tempo_atual = "❌ Não está em call"
 
     embed = discord.Embed(
-        title=f"<:membro:1428925668950806558> Perfil de {membro.display_name}",
+        title=f"<:membro:1456311222315253910> Perfil de {membro.display_name}",
         color=discord.Color.red(),
     )
     embed.set_thumbnail(url=(membro.avatar.url if membro.avatar else membro.display_avatar.url))
     embed.add_field(name="<:ponto1:1430319216787066962> Conta criada em:", value=membro.created_at.strftime("%d/%m/%Y"), inline=True)
     joined_at = membro.joined_at.strftime("%d/%m/%Y") if membro.joined_at else "Desconhecido"
-    embed.add_field(name="<:event:1428924599990616186>  Entrou no servidor:", value=joined_at, inline=True)
-    embed.add_field(name="<:papel:1440921270366634075> Sobre Mim:", value=sobre, inline=False)
-    embed.add_field(name="<:fone:1440920170251030611> Tempo atual em call:", value=tempo_atual, inline=True)
-    embed.add_field(name="<:relogio:1440920120288608346> Tempo total acumulado:", value=tempo_total_fmt, inline=True)
+    embed.add_field(name="<:evento:1456311189352091671>  Entrou no servidor:", value=joined_at, inline=True)
+    embed.add_field(name="<:papel:1456311222319971998> Sobre Mim:", value=sobre, inline=False)
+    embed.add_field(name="<:microfone:1456311268439883920> Tempo atual em call:", value=tempo_atual, inline=True)
+    embed.add_field(name="<:relogio:1456311245018759230> Tempo total acumulado:", value=tempo_total_fmt, inline=True)
 
     try:
         user = await bot.fetch_user(membro.id)
@@ -321,7 +424,7 @@ async def slash_callstatus(interaction: discord.Interaction):
     tempo_formatado = format_time(elapsed)
 
     embed = discord.Embed(
-        title="<:fone:1440920170251030611> Status da Call",
+        title="<:microfone:1456311268439883920> Status da Call",
         description=f"**{user.mention}** está em call!",
         color=discord.Color.blue()
     )
@@ -329,7 +432,7 @@ async def slash_callstatus(interaction: discord.Interaction):
     embed.set_thumbnail(url=(user.avatar.url if user.avatar else user.display_avatar.url))
     
     embed.add_field(
-        name="<:relogio:1440920120288608346> Tempo na call:",
+        name="<:relogio:1456311245018759230> Tempo na call:",
         value=f"**{tempo_formatado}**",
         inline=False
     )
@@ -356,13 +459,13 @@ async def slash_uptime(interaction: discord.Interaction):
     embed.set_thumbnail(url=(bot.user.avatar.url if bot.user.avatar else bot.user.display_avatar.url))
     
     embed.add_field(
-        name="<:relogio:1440920120288608346> Tempo online:",
+        name="<:relogio:1456311245018759230> Tempo online:",
         value=f"**{tempo_formatado}**",
         inline=False
     )
     
     embed.add_field(
-        name="<:event:1428924599990616186>  Iniciado em:",
+        name="<:evento:1456311189352091671>  Iniciado em:",
         value=f"<t:{int(bot.start_time.timestamp())}:F>",
         inline=False
     )
@@ -400,6 +503,17 @@ async def update_status():
             bot._last_presence = desired
         except Exception:
             pass
+
+
+@tasks.loop(minutes=5)
+async def retry_mongodb_connection():
+    """Tenta reconectar ao MongoDB a cada 5 minutos."""
+    if not bot.is_ready():
+        return
+    
+    if db_manager.retry_mongodb_connection():
+        print("✅ Reconexão com MongoDB bem-sucedida!")
+
 
 
 @bot.event
@@ -522,7 +636,20 @@ async def setup_hook():
     except Exception as e:
         print(f"Erro ao carregar cog rpg_combate: {e}")
 
+    try:
+        inventario = importlib.import_module("cogs.inventario")
+        await inventario.setup(bot)
+    except Exception as e:
+        print(f"Erro ao carregar cog inventario: {e}")
+
+    try:
+        loja = importlib.import_module("cogs.loja")
+        await loja.setup(bot)
+    except Exception as e:
+        print(f"Erro ao carregar cog loja: {e}")
+
     update_status.start()
+    retry_mongodb_connection.start()
     await bot.tree.sync()
 
 
@@ -531,9 +658,43 @@ async def before_update_status():
     await bot.wait_until_ready()
 
 
+@retry_mongodb_connection.before_loop
+async def before_retry_mongodb():
+    await bot.wait_until_ready()
+
+
 @bot.event
 async def on_ready():
     print(f"✅ Bot conectado como {bot.user} (ID: {bot.user.id})")
+    
+    # Verifica conexão com MongoDB
+    if db_manager.client:
+        try:
+            db_manager.client.admin.command('ping')
+            print("🟢 [MONGODB] Conectado com sucesso ao banco de dados MongoDB")
+        except Exception as e:
+            print(f"🔴 [MONGODB] Erro ao conectar com MongoDB: {e}")
+            print("⚠️  [MONGODB] Usando fallback JSON (data/db.json)")
+    else:
+        print("⚠️  [MONGODB] Nenhuma URI configurada - Usando fallback JSON (data/db.json)")
+    
+    # Sincroniza dados de economia com MongoDB na inicialização
+    sync_economia_to_db()
 
+
+@bot.event
+async def on_error(event, *args, **kwargs):
+    """Trata erros gerais do bot."""
+    print(f"Erro no evento {event}:", exc_info=True)
+
+
+def shutdown_handler():
+    """Handler para desligar o bot e fechar a conexão com o banco."""
+    db_manager.close()
+    print("Bot desligando...")
+
+
+import atexit
+atexit.register(shutdown_handler)
 
 bot.run(TOKEN)
