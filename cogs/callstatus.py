@@ -35,7 +35,7 @@ class CallStatus(commands.Cog):
         tempo_formatado = format_time(elapsed)
 
         embed = discord.Embed(
-            title="🎧 Status da Call",
+            title="<:microfone:1456311268439883920> Status da Call",
             description=f"**{user.mention}** está em call!",
             color=discord.Color.blue()
         )
@@ -43,7 +43,7 @@ class CallStatus(commands.Cog):
         embed.set_thumbnail(url=(user.avatar.url if user.avatar else user.display_avatar.url))
         
         embed.add_field(
-            name="⏱️ Tempo na call:",
+            name="<:relogio:1456311245018759230> Tempo na call:",
             value=f"**{tempo_formatado}**",
             inline=False
         )

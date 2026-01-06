@@ -95,10 +95,10 @@ except Exception:
     pass
 
 # Track last presence to avoid unnecessary change_presence calls
-bot._last_presence: str | None = None
+bot._last_presence = None  # Optional[str]
 
-bot.call_times: dict[int, datetime.datetime] = {}
-bot.active_users: set[int] = set()
+bot.call_times = {}  # Dict[int, datetime.datetime]
+bot.active_users = set()  # Set[int]
 bot.db = load_db
 bot.save_db = save_db
 
@@ -174,55 +174,21 @@ async def slash_help(interaction: discord.Interaction):
         description="Comandos disponíveis:",
         color=discord.Color.blurple(),
     )
-    embed.add_field(name="<:membro:1428925668950806558> Perfil", value="/perfil [membro] - Mostra os detalhes do perfil", inline=False)
-    embed.add_field(name="<:papel:1440921270366634075> Mensagens", value="/mensagem <título> <texto> - Cria uma embed simples\n/frase <frase> - Envia uma frase ou poesia", inline=False)
-    embed.add_field(name="<:papel:1440921270366634075> Sobre Mim", value="/set-sobre <texto> - Define seu 'Sobre Mim'", inline=False)
-    embed.add_field(name="<:fone:1440920170251030611> Call", value="/top-tempo - Ranking de tempo em call\n/callstatus - Seu tempo atual em call", inline=False)
-    embed.add_field(name="💰 Economia", value="/daily - Recompensa diária\n/mine - Minerar e ganhar souls\n/caça - Caça rápida (5s)\n/caça-longa - Caça longa (12h)\n/balance [membro] - Ver saldo de souls\n/top-souls - Ranking de souls\n/top-level - Ranking de níveis", inline=False)
-    embed.add_field(name="<:papel:1440921270366634075> Missões", value="/missoes - Ver suas missões\n/claim-missao <número> - Reivindicar recompensa", inline=False)
+    embed.add_field(name="<:membro:1456311222315253910> Perfil", value="/perfil [membro] - Mostra os detalhes do perfil", inline=False)
+    embed.add_field(name="<:papel:1456311322319917198> Mensagens", value="/mensagem <título> <texto> - Cria uma embed simples\n/frase <frase> - Envia uma frase ou poesia", inline=False)
+    embed.add_field(name="<:papel:1456311322319917198> Sobre Mim", value="/set-sobre <texto> - Define seu 'Sobre Mim'", inline=False)
+    embed.add_field(name="<:microfone:1456311268439883920> Call", value="/top-tempo - Ranking de tempo em call\n/callstatus - Seu tempo atual em call", inline=False)
+    embed.add_field(name="💰 Economia", value="/daily - Recompensa diária\n/mine - Minerar e ganhar souls\n/caça - Caça rápida (5s)\n/caça-longa - Caça longa (12h)\n/balance [membro] - Ver saldo de souls\n/top-souls - Ranking de souls\n/top-level - Ranking de níveis\n/pay - Transferir souls", inline=False)
+    embed.add_field(name="🏪 Loja & Inventário", value="/loja - Ver loja com lootboxes\n/comprar - Comprar item da loja\n/abrir - Abrir lootbox\n/usar - Usar elixir de XP\n/inventario - Ver seu inventário\n/vender - Vender item\n/equipar - Equipar item passivo\n/desequipar - Remover item equipado", inline=False)
+    embed.add_field(name="⚔️ RPG & Combate", value="/combate - Lutar contra mobs\n/equipar-rpg - Equipar armas/armaduras para combate\n/craft - Craftar itens com minérios\n/forjar - Refinar minérios", inline=False)
+    embed.add_field(name="<:papel:1456311322319917198> Missões", value="/missoes - Ver suas missões\n/claim-missao <número> - Reivindicar recompensa", inline=False)
+    embed.add_field(name="💼 Trabalho", value="/escolher-trabalho - Escolher profissão\n/trabalhar - Trabalhar e ganhar souls", inline=False)
     embed.add_field(name="ℹ️ Info", value="/uptime - Tempo online do bot", inline=False)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
-@bot.tree.command(name="perfil", description="Mostra um perfil completo do usuário.")
-@app_commands.describe(membro="Membro que terá o perfil exibido")
-async def slash_perfil(interaction: discord.Interaction, membro: discord.Member | None = None):
-    membro = membro or interaction.user
-    db, uid = ensure_user_record(membro.id)
-
-    sobre = db[uid].get("sobre") or "❌ Nenhum Sobre Mim definido ainda."
-    tempo_total = db[uid].get("tempo_total", 0)
-    tempo_total_fmt = format_time(tempo_total)
-
-    if membro.id in bot.active_users:
-        start = bot.call_times.get(membro.id, datetime.datetime.now())
-        elapsed = datetime.datetime.now() - start
-        tempo_atual = format_time(int(elapsed.total_seconds()))
-    else:
-        tempo_atual = "❌ Não está em call"
-
-    embed = discord.Embed(
-        title=f"<:membro:1428925668950806558> Perfil de {membro.display_name}",
-        color=discord.Color.red(),
-    )
-    embed.set_thumbnail(url=(membro.avatar.url if membro.avatar else membro.display_avatar.url))
-    embed.add_field(name="<:ponto1:1430319216787066962> Conta criada em:", value=membro.created_at.strftime("%d/%m/%Y"), inline=True)
-    joined_at = membro.joined_at.strftime("%d/%m/%Y") if membro.joined_at else "Desconhecido"
-    embed.add_field(name="<:event:1428924599990616186>  Entrou no servidor:", value=joined_at, inline=True)
-    embed.add_field(name="<:papel:1440921270366634075> Sobre Mim:", value=sobre, inline=False)
-    embed.add_field(name="<:fone:1440920170251030611> Tempo atual em call:", value=tempo_atual, inline=True)
-    embed.add_field(name="<:relogio:1440920120288608346> Tempo total acumulado:", value=tempo_total_fmt, inline=True)
-
-    try:
-        user = await bot.fetch_user(membro.id)
-        if user.banner:
-            embed.set_image(url=user.banner.url)
-    except discord.HTTPException:
-        pass
-
-    embed.set_footer(text="Aeternum Exilium • Sistema de Perfil")
-    await interaction.response.send_message(embed=embed)
-
+# Comando /perfil foi movido para cogs/perfil.py
+# para incluir o botão "Sobre" com estatísticas
 
 @bot.tree.command(name="mensagem", description="Cria mensagens personalizadas.")
 @app_commands.describe(titulo="Título da embed", texto="Texto principal da embed")
@@ -321,7 +287,7 @@ async def slash_callstatus(interaction: discord.Interaction):
     tempo_formatado = format_time(elapsed)
 
     embed = discord.Embed(
-        title="<:fone:1440920170251030611> Status da Call",
+        title="<:microfone:1456311268439883920> Status da Call",
         description=f"**{user.mention}** está em call!",
         color=discord.Color.blue()
     )
@@ -329,7 +295,7 @@ async def slash_callstatus(interaction: discord.Interaction):
     embed.set_thumbnail(url=(user.avatar.url if user.avatar else user.display_avatar.url))
     
     embed.add_field(
-        name="<:relogio:1440920120288608346> Tempo na call:",
+        name="<:relogio:1456311245018759230> Tempo na call:",
         value=f"**{tempo_formatado}**",
         inline=False
     )
@@ -356,13 +322,13 @@ async def slash_uptime(interaction: discord.Interaction):
     embed.set_thumbnail(url=(bot.user.avatar.url if bot.user.avatar else bot.user.display_avatar.url))
     
     embed.add_field(
-        name="<:relogio:1440920120288608346> Tempo online:",
+        name="<:relogio:1456311245018759230> Tempo online:",
         value=f"**{tempo_formatado}**",
         inline=False
     )
     
     embed.add_field(
-        name="<:event:1428924599990616186>  Iniciado em:",
+        name="<:evento:1456311189352091671>  Iniciado em:",
         value=f"<t:{int(bot.start_time.timestamp())}:F>",
         inline=False
     )
@@ -515,12 +481,33 @@ async def setup_hook():
     except Exception as e:
         print(f"Erro ao carregar cog frase: {e}")
 
+    # Carregar cog de perfil
+    try:
+        perfil = importlib.import_module("cogs.perfil")
+        await perfil.setup(bot)
+    except Exception as e:
+        print(f"Erro ao carregar cog perfil: {e}")
+
     # Carregar cog de combate RPG
     try:
         rpg = importlib.import_module("cogs.rpg_combate")
         await rpg.setup(bot)
     except Exception as e:
         print(f"Erro ao carregar cog rpg_combate: {e}")
+
+    # Carregar cog de loja
+    try:
+        loja = importlib.import_module("cogs.loja")
+        await loja.setup(bot)
+    except Exception as e:
+        print(f"Erro ao carregar cog loja: {e}")
+
+    # Carregar cog de inventário
+    try:
+        inventario = importlib.import_module("cogs.inventario")
+        await inventario.setup(bot)
+    except Exception as e:
+        print(f"Erro ao carregar cog inventario: {e}")
 
     update_status.start()
     await bot.tree.sync()

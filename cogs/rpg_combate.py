@@ -11,21 +11,21 @@ from discord import app_commands
 # ==============================
 # Sistema de Banco de Dados para Economia
 # ==============================
-ECONOMIA_DB_PATH = Path(__file__).parent.parent / "data" / "economia.json"
+DB_PATH = Path(__file__).parent.parent / "data" / "db.json"
 
 
-def ensure_economia_db_file() -> None:
-    """Garante que o arquivo de banco de dados de economia existe"""
-    ECONOMIA_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not ECONOMIA_DB_PATH.exists():
-        ECONOMIA_DB_PATH.write_text("{}", encoding="utf-8")
+def ensure_db_file() -> None:
+    """Garante que o arquivo de banco de dados existe"""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not DB_PATH.exists():
+        DB_PATH.write_text("{}", encoding="utf-8")
 
 
 def load_economia_db() -> dict:
     """Carrega o banco de dados de economia"""
-    ensure_economia_db_file()
+    ensure_db_file()
     try:
-        with ECONOMIA_DB_PATH.open("r", encoding="utf-8") as fp:
+        with DB_PATH.open("r", encoding="utf-8") as fp:
             return json.load(fp)
     except json.JSONDecodeError:
         return {}
@@ -33,8 +33,8 @@ def load_economia_db() -> dict:
 
 def save_economia_db(data: dict) -> None:
     """Salva o banco de dados de economia"""
-    ensure_economia_db_file()
-    with ECONOMIA_DB_PATH.open("w", encoding="utf-8") as fp:
+    ensure_db_file()
+    with DB_PATH.open("w", encoding="utf-8") as fp:
         json.dump(data, fp, ensure_ascii=False, indent=2)
 
 
@@ -78,6 +78,8 @@ MOBS = {
         "nome": "Lobo Selvagem",
         "vida": 3,
         "ataques": ["Mordida", "Arranho", "Investida"],
+        "recompensa_souls": 100,
+        "recompensa_xp": 50,
         "gif_ataque": "https://media.giphy.com/media/3o6ZsYq8d0pgLRZQXm/giphy.gif",
         "gif_morte": "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif"
     },
@@ -86,9 +88,53 @@ MOBS = {
         "nome": "Urso Feroz",
         "vida": 3,
         "ataques": ["Golpe de Garra", "Investida Poderosa", "Urro"],
+        "recompensa_souls": 150,
+        "recompensa_xp": 75,
         "gif_ataque": "https://media.giphy.com/media/l0HlDtKo5lWXtKlVm/giphy.gif",
         "gif_morte": "https://media.giphy.com/media/l0MYtKKzpmxvH4XbS/giphy.gif"
+    },
+    "ogro": {
+        "emoji": "👹",
+        "nome": "Ogro Guerreiro",
+        "vida": 5,
+        "ataques": ["Pancada Brutal", "Esmagamento", "Grito de Guerra"],
+        "recompensa_souls": 300,
+        "recompensa_xp": 150,
+        "gif_ataque": "https://media.giphy.com/media/3o7TKB3oifq46DDhOE/giphy.gif",
+        "gif_morte": "https://media.giphy.com/media/3o7TKVu6vYMN7rlMhW/giphy.gif"
+    },
+    "dragao": {
+        "emoji": "🐉",
+        "nome": "Dragão Ancião",
+        "vida": 8,
+        "ataques": ["Baforada de Fogo", "Golpe de Cauda", "Voo Rasante"],
+        "recompensa_souls": 800,
+        "recompensa_xp": 400,
+        "gif_ataque": "https://media.giphy.com/media/l0HlNaQ6gWfllcjDO/giphy.gif",
+        "gif_morte": "https://media.giphy.com/media/3o6Ztl7RvfNGzgWQ5a/giphy.gif"
+    },
+    "boss_sombrio": {
+        "emoji": "👿",
+        "nome": "Lorde das Sombras",
+        "vida": 12,
+        "ataques": ["Lâmina das Trevas", "Correntes Sombrias", "Explosão Negra"],
+        "recompensa_souls": 2000,
+        "recompensa_xp": 1000,
+        "gif_ataque": "https://media.giphy.com/media/3o7TKVuY3bXKOKU6u4/giphy.gif",
+        "gif_morte": "https://media.giphy.com/media/3o7TKOVq7xZT3VRHMs/giphy.gif"
     }
+}
+
+# ==============================
+# Dados dos Equipamentos RPG
+# ==============================
+EQUIPAMENTOS_RPG = {
+    # Armas
+    "espada_cobre": {"nome": "⚔️ Espada de Cobre", "tipo": "arma", "ataque": 5},
+    "espada_ferro": {"nome": "⚔️ Espada de Ferro", "tipo": "arma", "ataque": 10},
+    "espada_ouro": {"nome": "⚔️ Espada de Ouro", "tipo": "arma", "ataque": 20},
+    # Armaduras
+    "armadura_ferro": {"nome": "🛡️ Armadura de Ferro", "tipo": "armadura", "defesa": 15}
 }
 
 
@@ -96,11 +142,13 @@ MOBS = {
 # View com os Botões de Combate
 # ==============================
 class CombateButtons(discord.ui.View):
-    def __init__(self, user_id: int, mob_type: str, timeout: float = 600.0):
+    def __init__(self, user_id: int, mob_type: str, arma_equipada: dict = None, armadura_equipada: dict = None, timeout: float = 600.0):
         super().__init__(timeout=timeout)
         self.user_id = user_id
         self.mob_type = mob_type
         self.mob = MOBS[mob_type].copy()
+        self.arma_equipada = arma_equipada or {"nome": "Punhos", "ataque": 0}
+        self.armadura_equipada = armadura_equipada or {"nome": "Sem Armadura", "defesa": 0}
         self.player_vida = 3
         self.mob_vida = self.mob["vida"]
         self.turno_atual = "jogador"
@@ -133,19 +181,24 @@ class CombateButtons(discord.ui.View):
         # Defer a interação imediatamente
         await interaction.response.defer()
         
-        # Jogador ataca
-        dano_jogador = random.randint(1, 2)
+        # Jogador ataca (dano base + bônus da arma)
+        dano_base = random.randint(1, 2)
+        bonus_arma = self.arma_equipada.get("ataque", 0) // 5  # Cada 5 de ataque = +1 dano
+        dano_jogador = dano_base + bonus_arma
         self.mob_vida -= dano_jogador
-        self.historico.append(f"⚔️ Você atacou com sua **Espada**! Causou **{dano_jogador} de dano**!")
+        arma_nome = self.arma_equipada.get("nome", "Punhos")
+        self.historico.append(f"⚔️ Você atacou com **{arma_nome}**! Causou **{dano_jogador} de dano**!")
         
         if self.mob_vida <= 0:
             self.mob_derrotado = True
             await self.enviar_resultado_vitoria(interaction)
             return
         
-        # Mob ataca
+        # Mob ataca (dano reduzido pela armadura)
         ataque_mob = random.choice(self.mob["ataques"])
-        dano_mob = random.randint(1, 2)
+        dano_mob_base = random.randint(1, 2)
+        reducao_armadura = self.armadura_equipada.get("defesa", 0) // 15  # Cada 15 de defesa = -1 dano
+        dano_mob = max(1, dano_mob_base - reducao_armadura)
         self.player_vida -= dano_mob
         self.historico.append(f"🐾 {self.mob['nome']} usou **{ataque_mob}**! Causou **{dano_mob} de dano**!")
         
@@ -165,11 +218,14 @@ class CombateButtons(discord.ui.View):
         await interaction.response.defer()
         
         # Jogador se defende
-        self.historico.append(f"🛡️ Você se protegeu com seu **Escudo**! Reduzindo dano em 1.")
+        armadura_nome = self.armadura_equipada.get("nome", "Braços")
+        self.historico.append(f"🛡️ Você se protegeu com **{armadura_nome}**! Reduzindo dano.")
         
-        # Mob ataca
+        # Mob ataca com dano reduzido
         ataque_mob = random.choice(self.mob["ataques"])
-        dano_mob = max(0, random.randint(1, 2) - 1)  # Reduz 1 de dano
+        dano_mob_base = random.randint(1, 2)
+        reducao_total = 1 + (self.armadura_equipada.get("defesa", 0) // 15)
+        dano_mob = max(0, dano_mob_base - reducao_total)
         self.player_vida -= dano_mob
         self.historico.append(f"🐾 {self.mob['nome']} usou **{ataque_mob}**! Causou **{dano_mob} de dano**!")
         
@@ -229,17 +285,20 @@ class CombateButtons(discord.ui.View):
         
         # Barra de vida do jogador
         vida_jogador_str = "❤️ " * self.player_vida + "🖤 " * (3 - self.player_vida)
+        arma_info = f"⚔️ {self.arma_equipada['nome']} (+{self.arma_equipada.get('ataque', 0)} ATK)"
+        armadura_info = f"🛡️ {self.armadura_equipada['nome']} (+{self.armadura_equipada.get('defesa', 0)} DEF)"
         embed.add_field(
-            name="<:membro:1428925668950806558> Sua Vida",
-            value=f"{vida_jogador_str} ({self.player_vida}/3)",
+            name="<:membro:1456311222315253910> Sua Vida",
+            value=f"{vida_jogador_str} ({self.player_vida}/3)\n{arma_info}\n{armadura_info}",
             inline=False
         )
         
         # Barra de vida do mob
-        vida_mob_str = "❤️ " * max(0, self.mob_vida) + "🖤 " * max(0, 3 - self.mob_vida)
+        vida_mob_max = self.mob["vida"]
+        vida_mob_str = "❤️ " * max(0, self.mob_vida) + "🖤 " * max(0, vida_mob_max - self.mob_vida)
         embed.add_field(
             name=f"{self.mob['emoji']} {self.mob['nome']}",
-            value=f"{vida_mob_str} ({max(0, self.mob_vida)}/3)",
+            value=f"{vida_mob_str} ({max(0, self.mob_vida)}/{vida_mob_max})",
             inline=False
         )
         
@@ -258,13 +317,17 @@ class CombateButtons(discord.ui.View):
 
     async def enviar_resultado_vitoria(self, interaction: discord.Interaction):
         """Envia o resultado da vitória"""
+        # Calcular recompensas
+        recompensa_souls = self.mob.get("recompensa_souls", 100)
+        recompensa_xp = self.mob.get("recompensa_xp", 50)
+        
         embed = discord.Embed(
             title="🎉 VITÓRIA! 🎉",
             description=f"Você derrotou o **{self.mob['nome']}**!",
             color=discord.Color.green()
         )
         
-        # Adiciona almas ao jogador no DB principal do bot
+        # Adiciona souls e XP ao jogador no DB principal do bot
         try:
             db = interaction.client.db()
             uid = str(self.user_id)
@@ -285,18 +348,44 @@ class CombateButtons(discord.ui.View):
                     "missoes": [],
                     "missoes_completas": []
                 }
-            db[uid]["soul"] = db[uid].get("soul", 0) + 100
+            
+            # Adicionar souls
+            db[uid]["soul"] = db[uid].get("soul", 0) + recompensa_souls
+            
+            # Adicionar XP e calcular level
+            old_xp = db[uid].get("xp", 0)
+            new_xp = old_xp + recompensa_xp
+            db[uid]["xp"] = new_xp
+            
+            # Calcular novo nível
+            level = 1
+            required_xp = 100
+            current_xp = new_xp
+            while current_xp >= required_xp:
+                current_xp -= required_xp
+                level += 1
+                required_xp = int(required_xp * 1.5)
+            
+            old_level = db[uid].get("level", 1)
+            db[uid]["level"] = level
+            
             interaction.client.save_db(db)
+            
+            # Mostrar level up se houver
+            level_up_msg = ""
+            if level > old_level:
+                level_up_msg = f"\n🎉 **LEVEL UP! {old_level} → {level}**"
+                
         except Exception:
-            # Se algo der errado ao salvar no DB principal, tentar fallback no arquivo local
+            # Fallback
             try:
-                add_soul(self.user_id, 100)
+                add_soul(self.user_id, recompensa_souls)
             except Exception:
                 pass
         
         embed.add_field(
-            name="💰 Recompensa",
-            value="✨ **+100 Almas**",
+            name="💰 Recompensas",
+            value=f"✨ **+{recompensa_souls:,} Souls**\n⭐ **+{recompensa_xp:,} XP**{level_up_msg}",
             inline=False
         )
         
@@ -357,6 +446,140 @@ class CombateButtons(discord.ui.View):
 class RPGCombate(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+    
+    def get_user_rpg_equipment(self, user_id: int):
+        """Obtém equipamento RPG do usuário"""
+        try:
+            # Tentar pegar do cog Loja
+            loja_cog = self.bot.get_cog("Loja")
+            if loja_cog:
+                user_inv = loja_cog.get_user_inventory(user_id)
+                arma_id = user_inv.get("arma_equipada_rpg")
+                armadura_id = user_inv.get("armadura_equipada_rpg")
+                
+                arma = None
+                armadura = None
+                
+                if arma_id and arma_id in EQUIPAMENTOS_RPG:
+                    arma = EQUIPAMENTOS_RPG[arma_id]
+                
+                if armadura_id and armadura_id in EQUIPAMENTOS_RPG:
+                    armadura = EQUIPAMENTOS_RPG[armadura_id]
+                
+                return arma, armadura
+        except:
+            pass
+        
+        return None, None
+    
+    @app_commands.command(name="equipar-rpg", description="Equipe armas e armaduras para combate")
+    async def equipar_rpg(self, interaction: discord.Interaction):
+        """Equipa armas e armaduras craftadas para usar no combate"""
+        loja_cog = self.bot.get_cog("Loja")
+        if not loja_cog:
+            await interaction.response.send_message("❌ Sistema de inventário indisponível!", ephemeral=True)
+            return
+        
+        user_inv = loja_cog.get_user_inventory(interaction.user.id)
+        itens_inv = user_inv.get("itens", {})
+        
+        # Filtrar armas e armaduras que o usuário possui
+        armas_disponiveis = []
+        armaduras_disponiveis = []
+        
+        for item_id, qtd in itens_inv.items():
+            if qtd > 0 and item_id in EQUIPAMENTOS_RPG:
+                equip = EQUIPAMENTOS_RPG[item_id]
+                if equip["tipo"] == "arma":
+                    armas_disponiveis.append((item_id, equip))
+                elif equip["tipo"] == "armadura":
+                    armaduras_disponiveis.append((item_id, equip))
+        
+        if not armas_disponiveis and not armaduras_disponiveis:
+            await interaction.response.send_message(
+                "❌ Você não possui armas ou armaduras craftadas!\nUse `/craft` para criar equipamentos.",
+                ephemeral=True
+            )
+            return
+        
+        # Criar view com botões
+        class EquiparRPGView(discord.ui.View):
+            def __init__(self, cog_instance, armas, armaduras):
+                super().__init__(timeout=180)
+                self.cog = cog_instance
+                self.armas = armas
+                self.armaduras = armaduras
+                self.update_buttons()
+            
+            def update_buttons(self):
+                self.clear_items()
+                
+                # Botões para armas
+                for item_id, equip in self.armas[:5]:
+                    button = discord.ui.Button(
+                        label=f"{equip['nome']} (+{equip['ataque']} ATK)",
+                        style=discord.ButtonStyle.danger,
+                        custom_id=f"arma_{item_id}"
+                    )
+                    button.callback = self.create_equipar_callback(item_id, equip, "arma")
+                    self.add_item(button)
+                
+                # Botões para armaduras
+                for item_id, equip in self.armaduras[:5]:
+                    button = discord.ui.Button(
+                        label=f"{equip['nome']} (+{equip['defesa']} DEF)",
+                        style=discord.ButtonStyle.primary,
+                        custom_id=f"armadura_{item_id}"
+                    )
+                    button.callback = self.create_equipar_callback(item_id, equip, "armadura")
+                    self.add_item(button)
+            
+            def create_equipar_callback(self, item_id, equip, tipo):
+                async def callback(button_interaction: discord.Interaction):
+                    if button_interaction.user.id != interaction.user.id:
+                        await button_interaction.response.send_message("❌ Apenas quem usou o comando pode equipar!", ephemeral=True)
+                        return
+                    
+                    # Equipar item
+                    loja_cog = self.cog.bot.get_cog("Loja")
+                    if loja_cog:
+                        db = loja_cog.load_json()
+                        user_id_str = str(interaction.user.id)
+                        
+                        if "usuarios" not in db:
+                            db["usuarios"] = {}
+                        if user_id_str not in db["usuarios"]:
+                            db["usuarios"][user_id_str] = {"itens": {}, "equipados": {}}
+                        
+                        if tipo == "arma":
+                            db["usuarios"][user_id_str]["arma_equipada_rpg"] = item_id
+                        else:
+                            db["usuarios"][user_id_str]["armadura_equipada_rpg"] = item_id
+                        
+                        loja_cog.save_json(db)
+                        
+                        embed_sucesso = discord.Embed(
+                            title="✅ Equipamento Atualizado!",
+                            description=f"Você equipou: **{equip['nome']}**\n\nAgora use `/combate` para lutar!",
+                            color=discord.Color.green()
+                        )
+                        await button_interaction.response.send_message(embed=embed_sucesso, ephemeral=False)
+                
+                return callback
+        
+        # Criar embed
+        arma_atual, armadura_atual = self.get_user_rpg_equipment(interaction.user.id)
+        arma_texto = arma_atual["nome"] if arma_atual else "❌ Nenhuma"
+        armadura_texto = armadura_atual["nome"] if armadura_atual else "❌ Nenhuma"
+        
+        embed = discord.Embed(
+            title="⚔️ Equipar para Combate",
+            description=f"**Equipamento Atual:**\n⚔️ Arma: {arma_texto}\n🛡️ Armadura: {armadura_texto}\n\nClique nos botões para equipar:",
+            color=0xFF6B00
+        )
+        
+        view = EquiparRPGView(self, armas_disponiveis, armaduras_disponiveis)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
     @app_commands.command(name="combate", description="Inicie um combate contra um mob de RPG!")
     async def combate(self, interaction: discord.Interaction):
@@ -421,47 +644,30 @@ class RPGCombate(commands.Cog):
 
         # Escolhe aleatoriamente entre lobo e urso
         mob_type = random.choice(list(MOBS.keys()))
+        mob_info = MOBS[mob_type].copy()
         
-        # Cria a view com os botões
-        view = CombateButtons(interaction.user.id, mob_type)
+        # Pegar equipamentos do usuário
+        arma, armadura = self.get_user_rpg_equipment(interaction.user.id)
         
-        # Cria o embed inicial
-        embed = discord.Embed(
-            title="⚔️ COMBATE RPG ⚔️",
-            description=f"Um **{MOBS[mob_type]['nome']}** apareceu!",
-            color=discord.Color.gold()
+        # Cria a view com os botões passando equipamentos
+        view = CombateButtons(
+            interaction.user.id, 
+            mob_type, 
+            mob_info,
+            arma_equipada=arma,
+            armadura_equipada=armadura
         )
         
-        # Barra de vida do jogador
-        vida_jogador_str = "❤️ " * 3
-        embed.add_field(
-            name="👤 Sua Vida",
-            value=f"{vida_jogador_str} (3/3)",
-            inline=False
+        # Usar o método estático para criar o embed
+        embed = CombateButtons.criar_embed_combate(
+            interaction.user,
+            mob_info["nome"],
+            mob_info,
+            3,
+            mob_info["hp"],
+            arma,
+            armadura
         )
-        
-        # Barra de vida do mob
-        vida_mob_str = "❤️ " * 3
-        embed.add_field(
-            name=f"{MOBS[mob_type]['emoji']} {MOBS[mob_type]['nome']}",
-            value=f"{vida_mob_str} (3/3)",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="📜 Informações do Combate",
-            value="Escolha uma ação para atacar o inimigo!\n\n"
-                  "🗡️ **Ataque**: Dano normal (1-2)\n"
-                  "🛡️ **Defesa**: Reduz dano em 1 (0-1)\n"
-                  "⚔️ **Ataque Duplo**: Dano maior (2-3)\n\n"
-                  "📍 **Vitória**: Derrote o mob em 3 ataques\n"
-                  "📍 **Derrota**: Se receber 3 danos\n"
-                  "💰 **Recompensa**: 100 Almas",
-            inline=False
-        )
-        
-        # Adicionar GIF do mob aparecendo
-        embed.set_image(url=MOBS[mob_type].get("gif_ataque", ""))
         
         await interaction.response.send_message(embed=embed, view=view)
 

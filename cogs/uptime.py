@@ -28,13 +28,13 @@ class Uptime(commands.Cog):
         embed.set_thumbnail(url=(self.bot.user.avatar.url if self.bot.user.avatar else self.bot.user.display_avatar.url))
         
         embed.add_field(
-            name="<:relogio:1440920120288608346> Tempo online:",
+            name="<:relogio:1456311245018759230> Tempo online:",
             value=f"**{tempo_formatado}**",
             inline=False
         )
         
         embed.add_field(
-            name="<:event:1428924599990616186> Iniciado em:",
+            name="<:evento:1456311189352091671> Iniciado em:",
             value=f"<t:{int(self.bot.start_time.timestamp())}:F>",
             inline=False
         )

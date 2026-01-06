@@ -1,12 +1,15 @@
 # 🤖 Rede Exilium Bot
 
-Bot Discord completo para **Aeternum Exilium** com sistema de economia, níveis, perfil e muito mais!
+Bot Discord completo para **Aeternum Exilium** com sistema de economia, níveis, perfil, loja, inventário e muito mais!
 
 ---
 
 ## ✨ Funcionalidades
 
 - 💰 **Sistema de Economia** - Moeda (Souls), níveis e XP
+- 🏪 **Loja & Inventário** - Compre lootboxes, itens e gerencie seu inventário
+- 📦 **Sistema de Lootboxes** - Abra caixas e ganhe recompensas aleatórias
+- ✨ **Itens Consumíveis** - Use elixires de XP para subir de nível
 - 📊 **Rankings** - Top players em diferentes categorias
 - 🎯 **Missões** - Complete missões e ganhe recompensas
 - 🎧 **Tracking de Call** - Acompanhe tempo em chamadas de voz
@@ -14,6 +17,7 @@ Bot Discord completo para **Aeternum Exilium** com sistema de economia, níveis,
 - 🌲 **Sistema de Caça** - Caça rápida e caça longa por almas
 - 💼 **Sistema de Trabalho** - Escolha uma profissão e trabalhe por recompensas
 - ⚔️ **Mini Game — Combate RPG** - Combata mobs com botões (recompensa: +100 souls por vitória)
+- 🔨 **Sistema de Craft & Forja** - Crie itens poderosos
 
 ---
 
@@ -55,6 +59,59 @@ python main.py
 | `/top-souls`        | Ranking de souls                      | -        |
 | `/top-level`        | Ranking de níveis                     | -        |
 
+### 🏪 Loja & Inventário
+
+| Comando              | Descrição                                    |
+| -------------------- | -------------------------------------------- |
+| `/loja`              | Ver loja com lootboxes e itens               |
+| `/comprar`           | Comprar item da loja (autocomplete)          |
+| `/inventario`        | Ver seu inventário completo                  |
+| `/abrir`             | Abrir lootbox e ganhar recompensas (autocomplete) |
+| `/usar`              | Usar elixir de XP para subir nível (autocomplete) |
+| `/vender`            | Vender item para a loja (70% do valor)       |
+| `/equipar`           | Equipar item passivo (autocomplete)          |
+| `/desequipar`        | Remover item equipado (autocomplete)         |
+
+### 📦 Lootboxes Disponíveis
+
+| Lootbox           | Custo     | Souls      | Itens                |
+| ----------------- | --------- | ---------- | -------------------- |
+| 📦 Box Iniciante  | 500       | 50-125     | Fragmentos, Poções   |
+| 🎁 Box Rara       | 3.000     | 300-750    | Elixires, Gemas      |
+| 💎 Box Ultra      | 5.000     | 500-1.250  | Cristais, Fragmentos |
+| ⚡ Box Mítica     | 8.000     | 800-2.000  | Essências, Runas     |
+| 👑 Box Lendária   | 12.000    | 1.200-3.000| Itens Ancestrais     |
+
+### ✨ Elixires de XP
+
+| Item                 | XP     | Como Obter        |
+| -------------------- | ------ | ----------------- |
+| ✨ Elixir de XP      | +500   | Box Rara+         |
+| ✨ Grande Elixir     | +1.000 | Box Ultra+        |
+| 🌟 Elixir Lendário   | +2.000 | Box Mítica+       |
+| 🌠 Elixir Ancestral  | +3.500 | Box Lendária      |
+
+### 🎭 Itens Passivos Equipáveis
+
+Compre na `/loja` e equipe com `/equipar` para ganhar bônus permanentes!
+
+| Item                          | Custo     | Raridade    | Bônus                           |
+| ----------------------------- | --------- | ----------- | ------------------------------- |
+| ⏰ Anel da Velocidade | 5.000 | 🔵 Raro | -10% Cooldowns |
+| 💰 Anel da Fortuna | 8.000 | 🟣 Épico | +15% Souls |
+| 📿 Amuleto da Sabedoria | 7.000 | 🟣 Épico | +20% XP |
+| 👢 Botas de Hermes | 10.000 | 🟡 Lendário | -20% Cooldowns + 10% Souls |
+| 👑 Coroa de Exilium | 25.000 | 🔴 Ancestral | +25% Souls + 25% XP - 15% Cooldowns |
+| 🏅 Medalhão Membro Elite | 15.000 | 🟡 Lendário | +30% XP |
+| 💎 Bracelete do Administrador | 20.000 | 🔴 Ancestral | +20% Souls - 25% Cooldowns |
+| 🎤 Colar do Orador | 6.000 | 🔵 Raro | +12% XP por mensagens |
+
+**Como usar:**
+1. Compre o item na `/loja` (aba "Itens Passivos")
+2. Use `/equipar` e selecione o item
+3. Os bônus são aplicados automaticamente!
+4. Use `/desequipar` para remover
+
 ### 👤 Perfil
 
 | Comando              | Descrição                            |
@@ -88,19 +145,54 @@ python main.py
 
 ## 💎 Sistema de Economia
 
-### Moeda: Souls
+### Moeda: Souls <:alma:1456309061057511535>
 
 Ganhe souls através de:
 
-- ✅ Daily rewards
+- ✅ Daily rewards (50-150 souls)
+- ⛏️ Mineração (10-50 souls a cada 60s)
+- 🌲 Caça rápida (15-60 souls a cada 2min)
+- 🌲 Caça longa (200-500 souls a cada 12h)
+- 💼 Trabalho (50-150 souls + XP a cada 1h)
+- ⚔️ Combate RPG (100 souls por vitória)
+- 📦 Lootboxes (50-3.000 souls aleatórios)
+- 💱 Vender itens (70% do valor base)
+
+### Sistema de Lootboxes
+
+1. **Compre lootboxes** na `/loja` usando suas souls
+2. **Abra com** `/abrir` e escolha a box do popup
+3. **Ganhe recompensas:**
+   - Souls (25% do valor da box)
+   - Elixires de XP (para subir de nível)
+   - Fragmentos, Gemas, Cristais
+   - Itens raros e lendários
+4. **Use elixires** com `/usar` para ganhar XP instantâneo
+5. **Gerencie tudo** no `/inventario`
+
+### Autocomplete Inteligente
+
+Todos os comandos de itens possuem **autocomplete** que mostra apenas o que você tem:
+
+- `/abrir` - Mostra suas lootboxes
+- `/usar` - Mostra seus consumíveis  
+- `/vender` - Mostra todos seus itens
+- `/equipar` - Mostra itens passivos
+- `/desequipar` - Mostra itens equipados
+
+Não precisa decorar IDs! 🎯
+
+### Sistema de Níveis
+
+Ganhe **XP** através de:
+
+- 📨 Mensagens no servidor
+- ✅ Daily rewards  
 - ⛏️ Mineração
 - 🌲 Caça (rápida e longa)
 - 💼 Trabalho (profissões)
 - 🎯 Missões completas
-
-### Sistema de Níveis
-
-Ganhe **XP** enviando mensagens, fazendo daily, minerando, caçando, trabalhando ou completando missões.
+- ✨ **Elixires de XP** (novo!)
 
 **Fórmula:** XP necessária aumenta 50% a cada nível
 
@@ -171,7 +263,42 @@ Escolha uma profissão e trabalhe para ganhar souls e XP regularmente!
 - 🎯 **Estratégia** - Escolha a profissão que melhor se adapta ao seu estilo
 
 ---
+## 🗂️ Armazenamento de Dados
 
+Todos os dados são salvos em um único arquivo: **`data/db.json`**
+
+**Estrutura:**
+```json
+{
+  "user_id": {
+    "soul": 1000,
+    "xp": 500,
+    "level": 5,
+    "sobre": "Texto do perfil",
+    "tempo_total": 3600,
+    "last_daily": "timestamp",
+    "trabalho_atual": "programador",
+    "missoes": []
+  },
+  "usuarios": {
+    "user_id": {
+      "itens": {
+        "elixir_xp": 5,
+        "box_rara": 2
+      },
+      "equipados": {
+        "item_passivo": true
+      }
+    }
+  }
+}
+```
+
+- **Economia e XP**: Raiz do JSON por user_id
+- **Inventário**: Dentro de `usuarios[user_id]`  
+- **Backup automático**: Recomendado configurar backup do arquivo db.json
+
+---
 ## �🕹️ Mini Game — Combate RPG
 
 - Comando: `/combate`

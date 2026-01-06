@@ -68,6 +68,9 @@ class Perfil(commands.Cog):
 
     @app_commands.command(name="perfil", description="Mostra um perfil bonito e completo do usuário.")
     async def perfil(self, interaction: discord.Interaction, membro: discord.Member = None):
+        # Defer early to evitar expiração do interaction
+        await interaction.response.defer(thinking=False, ephemeral=False)
+
         membro = membro or interaction.user
         db = self.bot.db()
 
@@ -109,7 +112,22 @@ class Perfil(commands.Cog):
         rank_souls = await self.get_user_rank(db, user_id, "souls", interaction)
         rank_xp = await self.get_user_rank(db, user_id, "xp", interaction)
 
-        # EMBED
+        rank_souls_text = f"#{rank_souls}" if rank_souls else "Sem ranking"
+        rank_xp_text = f"#{rank_xp}" if rank_xp else "Sem ranking"
+
+        # DADOS PARA ABA SOBRE
+        # Contar itens passivos equipados
+        user_inv = db.get("usuarios", {}).get(user_id, {})
+        equipados = user_inv.get("equipados", {})
+        buffs_ativos = len(equipados)
+        
+        # Contar missões completas
+        missoes_completas = len(db[user_id].get("missoes_completas", []))
+        
+        # Contar itens no inventário
+        itens_inventario = sum(user_inv.get("itens", {}).values())
+
+        # EMBED PRINCIPAL
         embed = discord.Embed(
             title=f"👤 Perfil de {membro.display_name}",
             color=discord.Color.red()
@@ -131,40 +149,25 @@ class Perfil(commands.Cog):
             inline=True
         )
 
-        embed.add_field(
-            name="\u200b",
-            value="\u200b",
-            inline=True
-        )
+        embed.add_field(name="\u200b", value="\u200b", inline=True)
 
         # SOBRE MIM
         embed.add_field(
-            name="<:papel:1440921269846413475> Sobre Mim:",
+            name="<:papel:1456311322319917198> Sobre Mim:",
             value=sobre,
             inline=False
         )
 
-        # TEMPO EM CALL
-        rank_call_text = f"🏆 **#{rank_call}**" if rank_call else "❌ Sem ranking"
+        # TEMPO EM CALL (apenas atual e total)
         embed.add_field(
-            name="<:fone:1440920170251030611> Tempo em Call",
-            value=f"**Atual:** {tempo_atual}\n**Total:** {tempo_total_fmt}\n**Rank:** {rank_call_text}",
+            name="<:microfone:1456311268439883920> Tempo em Call",
+            value=f"**Atual:** {tempo_atual}",
             inline=True
         )
 
-        # ECONOMIA - Souls com ranking
-        rank_souls_text = f"🏆 **#{rank_souls}**" if rank_souls else "❌ Sem ranking"
         embed.add_field(
-            name="💎 Souls",
-            value=f"**{souls:,}** 💎\n**Rank:** {rank_souls_text}",
-            inline=True
-        )
-
-        # XP e Level com ranking
-        rank_xp_text = f"🏆 **#{rank_xp}**" if rank_xp else "❌ Sem ranking"
-        embed.add_field(
-            name="⭐ Nível & XP",
-            value=f"**Nível {level}**\n**{xp:,}** XP\n**Rank XP:** {rank_xp_text}",
+            name="⏱️ Tempo Total em Call",
+            value=f"**{tempo_total_fmt}**",
             inline=True
         )
 
@@ -178,10 +181,88 @@ class Perfil(commands.Cog):
 
         embed.set_footer(text="Aeternum Exilium • Sistema de Perfil")
 
-        await interaction.response.send_message(embed=embed)
+        # VIEW COM BOTÃO SOBRE
+        class PerfilView(discord.ui.View):
+            def __init__(self, bot_instance, member, data):
+                super().__init__(timeout=180)
+                self.bot = bot_instance
+                self.member = member
+                self.data = data
+                self.showing_sobre = False
+            
+            @discord.ui.button(label="📊 Sobre", style=discord.ButtonStyle.primary)
+            async def sobre_button(self, button_interaction: discord.Interaction, button: discord.ui.Button):
+                if button_interaction.user.id != interaction.user.id:
+                    await button_interaction.response.send_message("❌ Apenas quem chamou o comando pode usar os botões!", ephemeral=True)
+                    return
+                
+                if not self.showing_sobre:
+                    # Mostrar aba Sobre
+                    embed_sobre = discord.Embed(
+                        title=f"📊 Sobre - {self.member.display_name}",
+                        color=discord.Color.blue()
+                    )
+                    
+                    embed_sobre.set_thumbnail(url=(self.member.avatar.url if self.member.avatar else self.member.display_avatar.url))
+                    
+                    # STATS
+                    embed_sobre.add_field(
+                        name="📈 Stats",
+                        value=f"**Buffs Ativos:** {self.data['buffs_ativos']}/8\n"
+                              f"**Missões Feitas:** {self.data['missoes_completas']}",
+                        inline=False
+                    )
+                    
+                    # MOCHILA
+                    embed_sobre.add_field(
+                        name="🎒 Mochila",
+                        value=f"**Rank Souls:** {self.data['rank_souls_text']}\n"
+                              f"**Moedas:** {self.data['souls']:,} 💎\n"
+                              f"**Itens:** {self.data['itens_inventario']}",
+                        inline=False
+                    )
+
+                    # Nível e ranks
+                    embed_sobre.add_field(
+                        name="⭐ Nível & XP",
+                        value=f"**Nível:** {self.data['level']}\n"
+                              f"**XP:** {self.data['xp']:,}\n"
+                              f"**Rank XP:** {self.data['rank_xp_text']}\n"
+                              f"**Rank Top Souls:** {self.data['rank_souls_text']}",
+                        inline=False
+                    )
+                    
+                    embed_sobre.set_footer(text="Aeternum Exilium • Sistema de Perfil")
+                    
+                    button.label = "👤 Voltar"
+                    button.style = discord.ButtonStyle.secondary
+                    self.showing_sobre = True
+                    
+                    await button_interaction.response.edit_message(embed=embed_sobre, view=self)
+                else:
+                    # Voltar ao perfil principal
+                    button.label = "📊 Sobre"
+                    button.style = discord.ButtonStyle.primary
+                    self.showing_sobre = False
+                    
+                    await button_interaction.response.edit_message(embed=embed, view=self)
+
+        view = PerfilView(
+            self.bot,
+            membro,
+            {
+                'buffs_ativos': buffs_ativos,
+                'missoes_completas': missoes_completas,
+                'rank_souls_text': rank_souls_text,
+                'rank_xp_text': rank_xp_text,
+                'souls': souls,
+                'itens_inventario': itens_inventario,
+                'level': level,
+                'xp': xp
+            }
+        )
+
+        await interaction.followup.send(embed=embed, view=view)
 
 async def setup(bot):
-    cog = Perfil(bot)
-    await bot.add_cog(cog)
-    bot.tree.add_command(cog.perfil)
-
+    await bot.add_cog(Perfil(bot))
