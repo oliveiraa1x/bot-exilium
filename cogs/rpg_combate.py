@@ -130,6 +130,7 @@ MOBS = {
 # ==============================
 EQUIPAMENTOS_RPG = {
     # Armas
+    "espada_madeira": {"nome": "🪵 Espada de Madeira", "tipo": "arma", "ataque": 2, "bonus_fracionario": 0.5},
     "espada_cobre": {"nome": "⚔️ Espada de Cobre", "tipo": "arma", "ataque": 5},
     "espada_ferro": {"nome": "⚔️ Espada de Ferro", "tipo": "arma", "ataque": 10},
     "espada_ouro": {"nome": "⚔️ Espada de Ouro", "tipo": "arma", "ataque": 20},
@@ -149,6 +150,9 @@ class CombateButtons(discord.ui.View):
         self.mob = MOBS[mob_type].copy()
         self.arma_equipada = arma_equipada or {"nome": "Punhos", "ataque": 0}
         self.armadura_equipada = armadura_equipada or {"nome": "Sem Armadura", "defesa": 0}
+        # bônus fracionário da arma (ex.: 0.5 = meio coração por ataque em média)
+        self.bonus_fracionario = float(self.arma_equipada.get("bonus_fracionario", 0.0))
+        self.frac_bonus_acumulado = 0.0
         self.player_vida = 3
         self.mob_vida = self.mob["vida"]
         self.turno_atual = "jogador"
@@ -183,8 +187,13 @@ class CombateButtons(discord.ui.View):
         
         # Jogador ataca (dano base + bônus da arma)
         dano_base = random.randint(1, 2)
-        bonus_arma = self.arma_equipada.get("ataque", 0) // 5  # Cada 5 de ataque = +1 dano
-        dano_jogador = dano_base + bonus_arma
+        bonus_int = self.arma_equipada.get("ataque", 0) // 5  # Cada 5 de ataque = +1 dano
+        # Acumular bônus fracionário e converter em dano inteiro adicional quando atingir 1.0
+        self.frac_bonus_acumulado += self.bonus_fracionario
+        extra = int(self.frac_bonus_acumulado)
+        if extra > 0:
+            self.frac_bonus_acumulado -= extra
+        dano_jogador = dano_base + bonus_int + extra
         self.mob_vida -= dano_jogador
         arma_nome = self.arma_equipada.get("nome", "Punhos")
         self.historico.append(f"⚔️ Você atacou com **{arma_nome}**! Causou **{dano_jogador} de dano**!")
@@ -246,6 +255,13 @@ class CombateButtons(discord.ui.View):
         
         # Jogador faz ataque duplo
         dano_jogador = random.randint(2, 3)
+        # Aplicar bônus da arma também no ataque duplo
+        bonus_int = self.arma_equipada.get("ataque", 0) // 5
+        self.frac_bonus_acumulado += self.bonus_fracionario
+        extra = int(self.frac_bonus_acumulado)
+        if extra > 0:
+            self.frac_bonus_acumulado -= extra
+        dano_jogador += (bonus_int + extra)
         self.mob_vida -= dano_jogador
         self.historico.append(f"⚔️ Você atacou com **Ataques Rápidos**! Causou **{dano_jogador} de dano**!")
         
@@ -448,7 +464,9 @@ class RPGCombate(commands.Cog):
         self.bot = bot
     
     def get_user_rpg_equipment(self, user_id: int):
-        """Obtém equipamento RPG do usuário"""
+        """Obtém equipamento RPG do usuário, garantindo defaults se não equipado"""
+        arma = None
+        armadura = None
         try:
             # Tentar pegar do cog Loja
             loja_cog = self.bot.get_cog("Loja")
@@ -456,21 +474,20 @@ class RPGCombate(commands.Cog):
                 user_inv = loja_cog.get_user_inventory(user_id)
                 arma_id = user_inv.get("arma_equipada_rpg")
                 armadura_id = user_inv.get("armadura_equipada_rpg")
-                
-                arma = None
-                armadura = None
-                
                 if arma_id and arma_id in EQUIPAMENTOS_RPG:
                     arma = EQUIPAMENTOS_RPG[arma_id]
-                
                 if armadura_id and armadura_id in EQUIPAMENTOS_RPG:
                     armadura = EQUIPAMENTOS_RPG[armadura_id]
-                
-                return arma, armadura
-        except:
+        except Exception:
+            # Ignorar falhas e usar defaults
             pass
-        
-        return None, None
+
+        # Garantir que sempre exista um equipamento padrão
+        if not arma:
+            arma = {"nome": "Punhos", "tipo": "arma", "ataque": 0}
+        if not armadura:
+            armadura = {"nome": "Sem Armadura", "tipo": "armadura", "defesa": 0}
+        return arma, armadura
     
     @app_commands.command(name="equipar-rpg", description="Equipe armas e armaduras para combate")
     async def equipar_rpg(self, interaction: discord.Interaction):
@@ -651,26 +668,19 @@ class RPGCombate(commands.Cog):
         
         # Cria a view com os botões passando equipamentos
         view = CombateButtons(
-            interaction.user.id, 
-            mob_type, 
-            mob_info,
+            interaction.user.id,
+            mob_type,
             arma_equipada=arma,
             armadura_equipada=armadura
         )
         
-        # Usar o método estático para criar o embed
-        embed = CombateButtons.criar_embed_combate(
-            interaction.user,
-            mob_info["nome"],
-            mob_info,
-            3,
-            mob_info["hp"],
-            arma,
-            armadura
-        )
+        # Criar embed inicial a partir da view
+        embed = view.criar_embed_combate()
         
         await interaction.response.send_message(embed=embed, view=view)
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(RPGCombate(bot))
+    # Evitar carregamento duplicado do cog
+    if bot.get_cog("RPGCombate") is None:
+        await bot.add_cog(RPGCombate(bot))

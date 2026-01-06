@@ -1329,5 +1329,6 @@ class Economia(commands.Cog):
 
 async def setup(bot):
     cog = Economia(bot)
-    await bot.add_cog(cog)
+    if bot.get_cog("Economia") is None:
+        await bot.add_cog(cog)
 

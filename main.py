@@ -491,21 +491,25 @@ async def setup_hook():
     # Carregar cog de combate RPG
     try:
         rpg = importlib.import_module("cogs.rpg_combate")
-        await rpg.setup(bot)
+        # Evitar duplicar o cog em reloads
+        if bot.get_cog("RPGCombate") is None:
+            await rpg.setup(bot)
     except Exception as e:
         print(f"Erro ao carregar cog rpg_combate: {e}")
 
     # Carregar cog de loja
     try:
         loja = importlib.import_module("cogs.loja")
-        await loja.setup(bot)
+        if bot.get_cog("Loja") is None:
+            await loja.setup(bot)
     except Exception as e:
         print(f"Erro ao carregar cog loja: {e}")
 
     # Carregar cog de inventário
     try:
         inventario = importlib.import_module("cogs.inventario")
-        await inventario.setup(bot)
+        if bot.get_cog("Inventario") is None:
+            await inventario.setup(bot)
     except Exception as e:
         print(f"Erro ao carregar cog inventario: {e}")
 

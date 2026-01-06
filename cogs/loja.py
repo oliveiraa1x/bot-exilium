@@ -126,6 +126,9 @@ class Loja(commands.Cog):
             "elixir_lendario": 2000,
             "elixir_ancestral": 3500
         }
+
+        # Configuração do mercado
+        self.mercado_taxa = 0.05  # 5% taxa por venda
         
         # Itens passivos equipáveis
         self.itens_passivos = {
@@ -202,6 +205,18 @@ class Loja(commands.Cog):
                 "descricao": "Aumenta XP ganho por mensagens em 12%"
             }
         }
+
+        # Itens de RPG disponíveis para compra na loja
+        self.itens_rpg_loja = {
+            "espada_madeira": {
+                "nome": "🪵 Espada de Madeira",
+                "valor": 300,
+                "emoji": "🪵",
+                "raridade": "comum",
+                "tipo": "especial",
+                "descricao": "Arma básica que concede +½ coração de dano médio por ataque no combate RPG. Use /equipar-rpg após comprar."
+            }
+        }
     
     def load_json(self):
         """Carrega dados do arquivo db.json"""
@@ -216,6 +231,61 @@ class Loja(commands.Cog):
         self.db_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.db_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def display_name(self, item_data: dict) -> str:
+        """Retorna nome sem duplicar emoji (remove emoji se já estiver no nome)"""
+        nome = item_data.get("nome", "Item")
+        emoji = item_data.get("emoji", "")
+        if emoji and nome.startswith(emoji):
+            # remove o emoji inicial do nome
+            nome = nome[len(emoji):].strip()
+        return nome
+    # ==================== Mercado Helpers ====================
+    def ensure_mercado(self, db: dict) -> dict:
+        """Garante estrutura do mercado no DB"""
+        if "mercado" not in db:
+            db["mercado"] = {"listings": [], "taxa": self.mercado_taxa}
+        if "listings" not in db["mercado"]:
+            db["mercado"]["listings"] = []
+        return db
+
+    def add_market_listing(self, seller_id: int, item_id: str, quantidade: int, valor: int) -> str:
+        """Adiciona anúncio ao mercado e retorna ID do anúncio"""
+        db = self.load_json()
+        db = self.ensure_mercado(db)
+        listing_id = f"{seller_id}-{item_id}-{int(datetime.now().timestamp())}-{random.randint(1000,9999)}"
+        db["mercado"]["listings"].append({
+            "id": listing_id,
+            "seller_id": str(seller_id),
+            "item_id": item_id,
+            "quantidade": quantidade,
+            "valor": valor,
+            "created_at": datetime.now().isoformat()
+        })
+        self.save_json(db)
+        return listing_id
+
+    def get_market_listings(self) -> list:
+        """Retorna lista de anúncios atuais"""
+        db = self.load_json()
+        db = self.ensure_mercado(db)
+        return db["mercado"]["listings"]
+
+    def remove_market_listing(self, listing_id: str, dec_qtd: int = None):
+        """Remove ou decrementa quantidade de um anúncio"""
+        db = self.load_json()
+        db = self.ensure_mercado(db)
+        listings = db["mercado"]["listings"]
+        for i, l in enumerate(listings):
+            if l.get("id") == listing_id:
+                if dec_qtd is not None and l.get("quantidade", 0) > dec_qtd:
+                    l["quantidade"] = l["quantidade"] - dec_qtd
+                else:
+                    listings.pop(i)
+                break
+        db["mercado"]["listings"] = listings
+        self.save_json(db)
+        return True
     
     def get_user_inventory(self, user_id: str):
         """Obtém inventário do usuário"""
@@ -319,10 +389,10 @@ class Loja(commands.Cog):
     async def loja(self, interaction: discord.Interaction):
         """Mostra loja de itens"""
         db = self.load_json()
-        loja_items = db.get("loja_items", {})
+        loja_items_db = db.get("loja_items", {})
         
         # Combinar lootboxes, itens passivos e items da loja
-        loja_items = {**self.lootboxes, **self.itens_passivos, **loja_items}
+        loja_items = {**self.lootboxes, **self.itens_passivos, **self.itens_rpg_loja, **loja_items_db}
         
         user_almas = self.get_almas(interaction.user.id)
         
@@ -395,9 +465,9 @@ class Loja(commands.Cog):
                     raridade = item_data.get("raridade", "comum")
                     emoji = item_data.get("emoji", "⭐")
                     descricao = item_data.get("descricao", "Sem descrição")
-                    
+                    nome = self.ctx.display_name(item_data)
                     embed.add_field(
-                        name=f"{emoji} {item_data.get('nome', 'Item')}",
+                        name=f"{emoji} {nome}",
                         value=f"**Custo:** {valor} {self.ctx.emoji_alma}\n{descricao}\n**ID:** `{item_id}`",
                         inline=False
                     )
@@ -420,49 +490,44 @@ class Loja(commands.Cog):
         
         await interaction.response.send_message(embed=embed, view=view)
     
-    @app_commands.command(name="comprar", description="Compre um item da loja")
-    @app_commands.describe(item="ID do item para comprar (deixe vazio para ver itens)", quantidade="Quantidade (padrão: 1)")
-    async def comprar(self, interaction: discord.Interaction, item: str = None, quantidade: int = 1):
-        """Compra um item da loja"""
+    async def autocomplete_item_comprar(self, interaction: discord.Interaction, current: str):
+        """Autocomplete para listar itens disponíveis na loja"""
         db = self.load_json()
-        loja_items = {**self.lootboxes, **self.itens_passivos, **db.get("loja_items", {})}
-        
-        # Se não passar item, mostrar itens disponíveis
+        loja_items = {**self.lootboxes, **self.itens_passivos, **self.itens_rpg_loja, **db.get("loja_items", {})}
+        escolhas = []
+        for item_id, item_data in loja_items.items():
+            emoji = item_data.get("emoji", "⭐")
+            nome = self.display_name(item_data)
+            custo = item_data.get("valor", 0)
+            display = f"{emoji} {nome} - {custo} {self.emoji_alma}"
+            escolhas.append(app_commands.Choice(name=display[:100], value=item_id))
+        if current:
+            escolhas = [c for c in escolhas if current.lower() in c.name.lower() or current.lower() in c.value.lower()]
+        return escolhas[:25]
+    
+    @app_commands.command(name="comprar", description="Compre um item da loja")
+    @app_commands.describe(item="Escolha um item", quantidade="Quantidade (padrão: 1)")
+    @app_commands.autocomplete(item=autocomplete_item_comprar)
+    async def comprar(self, interaction: discord.Interaction, item: str = None, quantidade: int = 1):
+        """Compra um item da loja com confirmação"""
+        db = self.load_json()
+        loja_items = {**self.lootboxes, **self.itens_passivos, **self.itens_rpg_loja, **db.get("loja_items", {})}
+
+        # Se não passar item, orientar uso do autocomplete
         if not item:
-            user_almas = self.get_almas(interaction.user.id)
-            embed = discord.Embed(
-                title="🛒 Itens Disponíveis para Compra",
-                description=f"Suas Souls: **{user_almas}** {self.emoji_alma}\n\nUse `/comprar item:<id>` para comprar\n\n**Lootboxes:**",
-                color=0xFF6B9D
+            await interaction.response.send_message(
+                "Selecione o item pelo popup do parâmetro do comando.",
+                ephemeral=True
             )
-            
-            # Adicionar lootboxes
-            for box_id, box_data in self.lootboxes.items():
-                embed.add_field(
-                    name=f"{box_data['emoji']} {box_data['nome']}",
-                    value=f"**ID:** `{box_id}`\n**Custo:** {box_data['valor']} {self.emoji_alma}",
-                    inline=True
-                )
-            
-            # Adicionar itens passivos
-            embed.add_field(name="\u200b", value="**Itens Passivos:**", inline=False)
-            for item_id, item_data in self.itens_passivos.items():
-                embed.add_field(
-                    name=f"{item_data['emoji']} {item_data['nome']}",
-                    value=f"**ID:** `{item_id}`\n**Custo:** {item_data['valor']} {self.emoji_alma}",
-                    inline=True
-                )
-            
-            await interaction.response.send_message(embed=embed, ephemeral=False)
             return
-        
+
         if item not in loja_items:
-            await interaction.response.send_message("❌ Item não existe na loja! Use `/comprar` sem parâmetros para ver os itens.", ephemeral=False)
+            await interaction.response.send_message("❌ Item não existe na loja!", ephemeral=True)
             return
-        
+
         item_data = loja_items[item]
         valor_unitario = item_data.get("valor", 0)
-        
+
         # Itens passivos só podem ser comprados 1 por vez
         if item_data.get("tipo") == "passivo":
             quantidade = 1
@@ -471,36 +536,76 @@ class Loja(commands.Cog):
             if item in user_inv.get("itens", {}):
                 await interaction.response.send_message(
                     f"❌ Você já possui {item_data.get('emoji', '')} **{item_data.get('nome')}**!",
-                    ephemeral=False
+                    ephemeral=True
                 )
                 return
-        
+
         custo_total = valor_unitario * quantidade
-        
         user_almas = self.get_almas(interaction.user.id)
-        
-        if user_almas < custo_total:
-            embed = discord.Embed(
-                title="❌ Souls insuficientes",
-                description=f"Você tem: **{user_almas}** {self.emoji_alma}\nNecessário: **{custo_total}** {self.emoji_alma}",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=False)
-            return
-        
-        # Fazer compra
-        self.remove_almas(interaction.user.id, custo_total)
-        self.add_item(interaction.user.id, item, quantidade)
-        
+
+        class ConfirmarCompraView(discord.ui.View):
+            def __init__(self, ctx_self, item_id, item_info, qtd, total):
+                super().__init__(timeout=120)
+                self.ctx = ctx_self
+                self.item_id = item_id
+                self.item_info = item_info
+                self.qtd = qtd
+                self.total = total
+
+            @discord.ui.button(label="Confirmar", style=discord.ButtonStyle.success)
+            async def confirmar(self, button_interaction: discord.Interaction, button: discord.ui.Button):
+                if button_interaction.user.id != interaction.user.id:
+                    await button_interaction.response.send_message("❌ Apenas quem iniciou a compra pode confirmar.", ephemeral=True)
+                    return
+                # Revalidar saldo
+                saldo = self.ctx.get_almas(interaction.user.id)
+                if saldo < self.total:
+                    await button_interaction.response.send_message(
+                        f"❌ Souls insuficientes. Você tem {saldo} {self.ctx.emoji_alma} e precisa de {self.total} {self.ctx.emoji_alma}.",
+                        ephemeral=True
+                    )
+                    return
+                # Regras de passivo: 1 unidade
+                if self.item_info.get("tipo") == "passivo" and self.qtd != 1:
+                    self.qtd = 1
+                # Efetivar compra
+                self.ctx.remove_almas(interaction.user.id, self.total)
+                self.ctx.add_item(interaction.user.id, self.item_id, self.qtd)
+
+                ok = discord.Embed(
+                    title="✅ Compra realizada!",
+                    description=f"Você comprou **{self.qtd}x** {self.item_info.get('emoji','')} **{self.item_info.get('nome','Item')}**",
+                    color=discord.Color.green()
+                )
+                ok.add_field(name="Custo", value=f"{self.total} {self.ctx.emoji_alma}", inline=False)
+                ok.set_footer(text=f"Souls restantes: {saldo - self.total}")
+                await button_interaction.response.edit_message(embed=ok, view=None)
+
+            @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+            async def cancelar(self, button_interaction: discord.Interaction, button: discord.ui.Button):
+                if button_interaction.user.id != interaction.user.id:
+                    await button_interaction.response.send_message("❌ Apenas quem iniciou a compra pode cancelar.", ephemeral=True)
+                    return
+                cancel = discord.Embed(
+                    title="🛑 Compra cancelada",
+                    description="Nenhuma alteração foi feita.",
+                    color=discord.Color.red()
+                )
+                await button_interaction.response.edit_message(embed=cancel, view=None)
+
         embed = discord.Embed(
-            title="✅ Compra realizada!",
-            description=f"Você comprou **{quantidade}x** {item_data.get('emoji', '')} **{item_data.get('nome', 'Item')}**",
-            color=discord.Color.green()
+            title="🛒 Confirmar Compra",
+            description=(
+                f"Item: {item_data.get('emoji','')} **{self.display_name(item_data)}**\n"
+                f"Quantidade: **{quantidade}x**\n"
+                f"Preço unitário: **{valor_unitario}** {self.emoji_alma}\n"
+                f"Total: **{custo_total}** {self.emoji_alma}"
+            ),
+            color=0xFF6B9D
         )
-        embed.add_field(name="Custo", value=f"{custo_total} {self.emoji_alma}", inline=False)
-        embed.set_footer(text=f"Souls restantes: {user_almas - custo_total}")
-        
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        embed.set_footer(text=f"Seu saldo: {user_almas} {self.emoji_alma}")
+        view = ConfirmarCompraView(self, item, item_data, quantidade, custo_total)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
     
     async def autocomplete_box(self, interaction: discord.Interaction, current: str):
         """Autocomplete para mostrar lootboxes que o usuário possui"""
@@ -1087,18 +1192,26 @@ class Loja(commands.Cog):
         db = self.load_json()
         itens_info = {}
         
+        # Adicionar itens do BD (craft, forja, shop)
         for categoria in ["itens_craft", "itens_forja", "itens_passivos", "loja_items"]:
             cat_items = db.get(categoria, {})
             for item_id, item_data in cat_items.items():
                 if item_id in itens_inv and itens_inv[item_id] > 0:
                     emoji = item_data.get("emoji", "⭐")
-                    nome = item_data.get("nome", item_id)
+                    nome = self.display_name(item_data)
                     itens_info[item_id] = f"{emoji} {nome}"
         
-        # Adicionar lootboxes
+        # Adicionar lootboxes (embutidos na classe)
         for box_id, box_data in self.lootboxes.items():
             if box_id in itens_inv and itens_inv[box_id] > 0:
                 itens_info[box_id] = f"{box_data['emoji']} {box_data['nome']}"
+        
+        # Adicionar itens de RPG da loja (espada_madeira, etc)
+        for item_id, item_data in self.itens_rpg_loja.items():
+            if item_id in itens_inv and itens_inv[item_id] > 0:
+                emoji = item_data.get("emoji", "⭐")
+                nome = self.display_name(item_data)
+                itens_info[item_id] = f"{emoji} {nome}"
         
         # Criar lista de escolhas
         itens_disponiveis = []
@@ -1121,86 +1234,170 @@ class Loja(commands.Cog):
         
         return itens_disponiveis[:25]
     
-    @app_commands.command(name="vender", description="Venda um item para a loja")
-    @app_commands.describe(item="Escolha um item para vender", quantidade="Quantidade (padrão: 1)")
+    @app_commands.command(name="vender", description="Anuncie um item no mercado entre jogadores")
+    @app_commands.describe(item="Escolha um item para vender", valor="Preço por unidade", quantidade="Quantidade (padrão: 1)")
     @app_commands.autocomplete(item=autocomplete_item_vender)
-    async def vender(self, interaction: discord.Interaction, item: str, quantidade: int = 1):
-        """Vende um item para a loja"""
+    async def vender(self, interaction: discord.Interaction, item: str, valor: int, quantidade: int = 1):
+        """Cria um anúncio de venda no mercado com preço definido"""
         db = self.load_json()
         user_inv = self.get_user_inventory(interaction.user.id)
         itens_inv = user_inv.get("itens", {})
-        
-        # Procurar item em todas as categorias
-        item_data = None
-        valor_unitario = 0
-        
-        for categoria in ["itens_craft", "itens_forja", "itens_passivos", "loja_items"]:
-            cat_items = db.get(categoria, {})
-            if item in cat_items:
-                item_data = cat_items[item]
-                raridade = item_data.get("raridade", "comum")
-                valor_base = item_data.get("valor_base", item_data.get("valor", 0))
-                multiplicador = db.get("raridades", {}).get(raridade, {}).get("valor_multiplicador", 1.0)
-                valor_unitario = int(valor_base * multiplicador * 0.7)  # 70% do valor
-                break
-        
-        if not item_data:
-            await interaction.response.send_message("❌ Item não encontrado!", ephemeral=True)
+
+        if valor <= 0:
+            await interaction.response.send_message("❌ Informe um valor válido maior que zero.", ephemeral=True)
             return
-        
+
+        # Validar se o item existe no mapeamento de itens conhecidos
+        item_data = None
+        # Procurar nas fontes conhecidas
+        fontes = [self.lootboxes, self.itens_passivos, self.itens_rpg_loja, db.get("loja_items", {}), db.get("itens_craft", {}), db.get("itens_forja", {})]
+        for fonte in fontes:
+            if item in fonte:
+                item_data = fonte[item]
+                break
+
+        if not item_data:
+            await interaction.response.send_message("❌ Item não encontrado nas categorias conhecidas.", ephemeral=True)
+            return
+
         if item not in itens_inv or itens_inv[item] < quantidade:
             await interaction.response.send_message(
-                f"❌ Você não tem {quantidade}x desse item!",
+                f"❌ Você não tem {quantidade}x desse item para anunciar.",
                 ephemeral=True
             )
             return
-        
-        valor_total = valor_unitario * quantidade
-        
-        # Fazer venda
-        self.remove_item(interaction.user.id, item, quantidade)
-        self.add_almas(interaction.user.id, valor_total)
-        
+
+        # Reservar itens do inventário (remover ao anunciar)
+        reservado = self.remove_item(interaction.user.id, item, quantidade)
+        if not reservado:
+            await interaction.response.send_message("❌ Falha ao reservar itens para o anúncio.", ephemeral=True)
+            return
+
+        listing_id = self.add_market_listing(interaction.user.id, item, quantidade, valor)
+
         emoji = item_data.get("emoji", "⭐")
         nome = item_data.get("nome", item)
-        
         embed = discord.Embed(
-            title="✅ Venda realizada!",
-            description=f"Você vendeu **{quantidade}x** {emoji} **{nome}**",
+            title="✅ Anúncio Criado",
+            description=f"Você anunciou **{quantidade}x** {emoji} **{nome}** por **{valor}** {self.emoji_alma} cada.",
             color=discord.Color.green()
         )
-        embed.add_field(name="Valor unitário", value=f"{valor_unitario} {self.emoji_alma}", inline=True)
-        embed.add_field(name="Valor total", value=f"{valor_total} {self.emoji_alma}", inline=True)
-        embed.set_footer(text="Você recebeu 70% do valor base do item")
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        embed.add_field(name="ID do anúncio", value=listing_id, inline=False)
+        embed.set_footer(text="Use /mercado para ver e outras pessoas comprarem.")
+        await interaction.response.send_message(embed=embed, ephemeral=False)
     
-    @app_commands.command(name="mercado", description="Sistema de mercado entre players")
+    @app_commands.command(name="mercado", description="Veja anúncios e compre de outros jogadores")
     async def mercado(self, interaction: discord.Interaction):
-        """Mercado entre players (em desenvolvimento)"""
+        """Lista anúncios do mercado e permite compra via botões"""
+        db = self.load_json()
+        db = self.ensure_mercado(db)
+        listings = db["mercado"].get("listings", [])
+
+        if not listings:
+            embed_vazio = discord.Embed(
+                title="🏪 Mercado Global",
+                description="Nenhum anúncio no momento. Use `/vender` para anunciar seus itens.",
+                color=0x2ECC71
+            )
+            await interaction.response.send_message(embed=embed_vazio, ephemeral=False)
+            return
+
+        # Renderizar primeira página de até 5 anúncios com botões de compra
+        class MercadoView(discord.ui.View):
+            def __init__(self, ctx_self, all_listings):
+                super().__init__(timeout=300)
+                self.ctx = ctx_self
+                self.listings = all_listings[:5]
+                for l in self.listings:
+                    btn = discord.ui.Button(
+                        label=f"Comprar {l['item_id']} ({l['quantidade']}x) - {l['valor']}",
+                        style=discord.ButtonStyle.success,
+                        custom_id=f"comprar_{l['id']}"
+                    )
+                    btn.callback = self._make_buy_callback(l)
+                    self.add_item(btn)
+
+            def _make_buy_callback(self, listing):
+                async def callback(button_interaction: discord.Interaction):
+                    if button_interaction.user.id == int(listing.get("seller_id")):
+                        await button_interaction.response.send_message("❌ Você não pode comprar seu próprio anúncio.", ephemeral=True)
+                        return
+
+                    # Verificar saldo
+                    total_price = int(listing.get("valor", 0)) * int(listing.get("quantidade", 1))
+                    saldo = self.ctx.get_almas(button_interaction.user.id)
+                    if saldo < total_price:
+                        await button_interaction.response.send_message(
+                            f"❌ Souls insuficientes. Você precisa de {total_price} {self.ctx.emoji_alma}.",
+                            ephemeral=True
+                        )
+                        return
+
+                    # Cobrar comprador
+                    self.ctx.remove_almas(button_interaction.user.id, total_price)
+
+                    # Calcular taxa e repasse
+                    taxa = self.ctx.mercado_taxa
+                    repasse = int(total_price * (1 - taxa))
+
+                    # Pagar vendedor e entregar item
+                    seller_id = int(listing.get("seller_id"))
+                    self.ctx.add_almas(seller_id, repasse)
+                    self.ctx.add_item(button_interaction.user.id, listing.get("item_id"), int(listing.get("quantidade", 1)))
+
+                    # Remover anúncio
+                    self.ctx.remove_market_listing(listing.get("id"))
+
+                    # DM ao vendedor
+                    try:
+                        seller_user = self.ctx.bot.get_user(seller_id) or await self.ctx.bot.fetch_user(seller_id)
+                        if seller_user:
+                            dm_embed = discord.Embed(
+                                title="📬 Venda Concluída",
+                                description=(
+                                    f"Seu anúncio foi comprado por <@{button_interaction.user.id}>!\n"
+                                    f"Item: **{listing.get('item_id')}** x{listing.get('quantidade')}\n"
+                                    f"Valor total: **{total_price}** {self.ctx.emoji_alma}\n"
+                                    f"Taxa do mercado: **{int(total_price * taxa)}** {self.ctx.emoji_alma}\n"
+                                    f"Você recebeu: **{repasse}** {self.ctx.emoji_alma}"
+                                ),
+                                color=discord.Color.blue()
+                            )
+                            await seller_user.send(embed=dm_embed)
+                    except Exception:
+                        pass
+
+                    # Confirmação ao comprador
+                    embed_ok = discord.Embed(
+                        title="✅ Compra realizada",
+                        description=(
+                            f"Você comprou **{listing.get('item_id')}** x{listing.get('quantidade')} por **{total_price}** {self.ctx.emoji_alma}.\n"
+                            f"O vendedor recebeu **{repasse}** {self.ctx.emoji_alma} (taxa {int(taxa*100)}%)."
+                        ),
+                        color=discord.Color.green()
+                    )
+                    await button_interaction.response.send_message(embed=embed_ok, ephemeral=False)
+
+                return callback
+
+        # Montar embed
         embed = discord.Embed(
             title="🏪 Mercado Global",
-            description="""
-**Mercado em desenvolvimento!**
-
-Este será um sistema onde você pode:
-- 📤 Colocar itens à venda
-- 📥 Comprar itens de outros players
-- 💰 Negociar preços
-- 📊 Ver histórico de vendas
-
-**Funcionalidades:**
-- Taxa de imposto: 5% das vendas
-- Sistema de oferta/contra-oferta
-- Ranking de vendedores
-- Histórico de transações
-            """,
+            description=f"Taxa do mercado: {int(self.mercado_taxa*100)}% por venda",
             color=0x2ECC71
         )
-        embed.set_footer(text="Volte em breve!")
-        
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        for l in listings[:5]:
+            seller_mention = f"<@{l.get('seller_id')}>"
+            embed.add_field(
+                name=f"{l.get('item_id')} x{l.get('quantidade')}",
+                value=f"Preço: {l.get('valor')} {self.emoji_alma} cada\nVendedor: {seller_mention}\nID: `{l.get('id')}`",
+                inline=False
+            )
+
+        view = MercadoView(self, listings)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
 
 async def setup(bot):
-    await bot.add_cog(Loja(bot))
+    if bot.get_cog("Loja") is None:
+        await bot.add_cog(Loja(bot))
