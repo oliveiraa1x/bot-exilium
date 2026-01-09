@@ -30,18 +30,16 @@ class Perfil(commands.Cog):
                 if uid in checked_users:
                     is_bot = checked_users[uid]
                 else:
+                    # Tentar pegar o member do servidor primeiro (não faz requisição API)
                     member = interaction.guild.get_member(uid_int) if interaction.guild else None
                     if member:
                         is_bot = member.bot
                         checked_users[uid] = is_bot
                     else:
-                        try:
-                            user = await self.bot.fetch_user(uid_int)
-                            is_bot = user.bot
-                            checked_users[uid] = is_bot
-                        except:
-                            checked_users[uid] = True  # Marcar como bot se não conseguir buscar
-                            continue
+                        # Se não está no servidor, assume que não é bot para evitar rate limit
+                        # Usuários que saíram do servidor mas têm dados ainda contam no ranking
+                        checked_users[uid] = False
+                        is_bot = False
                 
                 if not is_bot:
                     if category == "call":
@@ -116,16 +114,16 @@ class Perfil(commands.Cog):
         rank_xp_text = f"#{rank_xp}" if rank_xp else "Sem ranking"
 
         # DADOS PARA ABA SOBRE
-        # Contar itens passivos equipados
-        user_inv = db.get("usuarios", {}).get(user_id, {})
-        equipados = user_inv.get("equipados", {})
+        # Contar itens passivos equipados (novo modelo: db[uid]['inventario'])
+        inv = db.get(user_id, {}).get("inventario", {})
+        equipados = inv.get("equipados", {})
         buffs_ativos = len(equipados)
-        
+
         # Contar missões completas
         missoes_completas = len(db[user_id].get("missoes_completas", []))
-        
+
         # Contar itens no inventário
-        itens_inventario = sum(user_inv.get("itens", {}).values())
+        itens_inventario = sum(inv.get("itens", {}).values())
 
         # EMBED PRINCIPAL
         embed = discord.Embed(
@@ -171,12 +169,16 @@ class Perfil(commands.Cog):
             inline=True
         )
 
-        # Banner
+        # Banner (tentar buscar apenas se for necessário)
         try:
-            user = await self.bot.fetch_user(membro.id)
-            if user.banner:
-                embed.set_image(url=user.banner.url)
-        except:
+            # Só buscar banner se o member não tiver (evita fetch desnecessário)
+            if not hasattr(membro, 'banner') or membro.banner is None:
+                user = await self.bot.fetch_user(membro.id)
+                if user.banner:
+                    embed.set_image(url=user.banner.url)
+            elif membro.banner:
+                embed.set_image(url=membro.banner.url)
+        except Exception:
             pass
 
         embed.set_footer(text="Aeternum Exilium • Sistema de Perfil")
@@ -262,7 +264,12 @@ class Perfil(commands.Cog):
             }
         )
 
-        await interaction.followup.send(embed=embed, view=view)
+        # Usar edit_original_response ao invés de followup.send para evitar erro 404
+        try:
+            await interaction.edit_original_response(embed=embed, view=view)
+        except discord.NotFound:
+            # Se a mensagem original não existir, tentar com followup
+            await interaction.followup.send(embed=embed, view=view)
 
 async def setup(bot):
     await bot.add_cog(Perfil(bot))

@@ -222,8 +222,9 @@ class Loja(commands.Cog):
         """Carrega dados do arquivo db.json"""
         try:
             with open(self.db_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except FileNotFoundError:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except (FileNotFoundError, json.JSONDecodeError):
             return {}
     
     def save_json(self, data):
@@ -288,89 +289,142 @@ class Loja(commands.Cog):
         return True
     
     def get_user_inventory(self, user_id: str):
-        """Obtém inventário do usuário"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        
-        if "usuarios" not in db:
-            db["usuarios"] = {}
-        
-        if user_id_str not in db["usuarios"]:
-            db["usuarios"][user_id_str] = {
-                "itens": {},
-                "equipados": {},
-                "created_at": datetime.now().isoformat()
-            }
-            self.save_json(db)
-        
-        return db["usuarios"][user_id_str]
+        """Obtém inventário do usuário dentro do registro do próprio usuário.
+        Estrutura: db[uid]["inventario"] = {"itens":{}, "equipados":{}, "created_at": ...}
+        """
+        try:
+            db = self.bot.db()
+            use_bot = True
+        except Exception:
+            db = self.load_json()
+            use_bot = False
+
+        uid = str(user_id)
+
+        if uid not in db:
+            db[uid] = {}
+
+        inv = db[uid].get("inventario")
+        if not inv or not isinstance(inv, dict):
+            inv = {"itens": {}, "equipados": {}, "created_at": ""}
+            db[uid]["inventario"] = inv
+            try:
+                if use_bot:
+                    self.bot.save_db(db)
+                else:
+                    self.save_json(db)
+            except Exception:
+                pass
+
+        return inv
     
     def add_item(self, user_id: str, item_id: str, quantidade: int = 1):
-        """Adiciona item ao inventário"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        
-        if "usuarios" not in db:
-            db["usuarios"] = {}
-        
-        user_inv = self.get_user_inventory(user_id)
-        
-        if item_id not in user_inv["itens"]:
-            user_inv["itens"][item_id] = 0
-        
-        user_inv["itens"][item_id] += quantidade
-        db["usuarios"][user_id_str] = user_inv
-        self.save_json(db)
+        """Adiciona item ao inventário do usuário (em db[uid]["inventario"])."""
+        try:
+            db = self.bot.db()
+            use_bot = True
+        except Exception:
+            db = self.load_json()
+            use_bot = False
+
+        uid = str(user_id)
+        if uid not in db:
+            db[uid] = {}
+        inv = db[uid].get("inventario")
+        if not inv or not isinstance(inv, dict):
+            inv = {"itens": {}, "equipados": {}, "created_at": ""}
+            db[uid]["inventario"] = inv
+
+        itens = inv.setdefault("itens", {})
+        itens[item_id] = itens.get(item_id, 0) + quantidade
+
+        if use_bot:
+            self.bot.save_db(db)
+        else:
+            self.save_json(db)
     
     def remove_item(self, user_id: str, item_id: str, quantidade: int = 1) -> bool:
-        """Remove item do inventário"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        user_inv = self.get_user_inventory(user_id)
-        
-        if item_id not in user_inv["itens"] or user_inv["itens"][item_id] < quantidade:
+        """Remove item do inventário em db[uid]["inventario"]."""
+        try:
+            db = self.bot.db()
+            use_bot = True
+        except Exception:
+            db = self.load_json()
+            use_bot = False
+
+        uid = str(user_id)
+        inv = db.get(uid, {}).get("inventario")
+        if not inv:
             return False
-        
-        user_inv["itens"][item_id] -= quantidade
-        if user_inv["itens"][item_id] == 0:
-            del user_inv["itens"][item_id]
-        
-        db["usuarios"][user_id_str] = user_inv
-        self.save_json(db)
+        itens = inv.get("itens", {})
+        if itens.get(item_id, 0) < quantidade:
+            return False
+        itens[item_id] -= quantidade
+        if itens[item_id] <= 0:
+            del itens[item_id]
+
+        if use_bot:
+            self.bot.save_db(db)
+        else:
+            self.save_json(db)
         return True
     
     def get_almas(self, user_id: str) -> int:
-        """Obtém almas (soul) do usuário do sistema de economia"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        return db.get(user_id_str, {}).get("soul", 0)
+        """Obtém almas (soul) do usuário do sistema de economia principal"""
+        try:
+            # Usar o sistema de economia do bot (db.db())
+            db = self.bot.db()
+            user_id_str = str(user_id)
+            return db.get(user_id_str, {}).get("soul", 0)
+        except:
+            # Fallback para o db.json da loja se o bot.db() falhar
+            db = self.load_json()
+            user_id_str = str(user_id)
+            return db.get(user_id_str, {}).get("soul", 0)
     
     def add_almas(self, user_id: str, quantidade: int):
-        """Adiciona almas (soul) ao usuário"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        if user_id_str not in db:
-            db[user_id_str] = {"soul": 0}
-        db[user_id_str]["soul"] = db[user_id_str].get("soul", 0) + quantidade
-        self.save_json(db)
+        """Adiciona almas (soul) ao usuário no sistema principal"""
+        try:
+            # Usar o sistema de economia do bot
+            db = self.bot.db()
+            user_id_str = str(user_id)
+            if user_id_str not in db:
+                db[user_id_str] = {"soul": 0}
+            db[user_id_str]["soul"] = db[user_id_str].get("soul", 0) + quantidade
+            self.bot.save_db(db)
+        except:
+            # Fallback para salvar localmente
+            db = self.load_json()
+            user_id_str = str(user_id)
+            if user_id_str not in db:
+                db[user_id_str] = {"soul": 0}
+            db[user_id_str]["soul"] = db[user_id_str].get("soul", 0) + quantidade
+            self.save_json(db)
     
     def remove_almas(self, user_id: str, quantidade: int) -> bool:
-        """Remove almas (soul) se tiver quantidade suficiente"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        soul_atual = db.get(user_id_str, {}).get("soul", 0)
-        
-        if soul_atual >= quantidade:
-            db[user_id_str]["soul"] = soul_atual - quantidade
+        """Remove almas (soul) se tiver quantidade suficiente no sistema principal"""
+        try:
+            # Usar o sistema de economia do bot
+            db = self.bot.db()
+            user_id_str = str(user_id)
+            soul_atual = db.get(user_id_str, {}).get("soul", 0)
             
-            # Adicionar ao balance do bot
-            if "bot_souls" not in db:
-                db["bot_souls"] = 0
-            db["bot_souls"] = db.get("bot_souls", 0) + quantidade
+            if soul_atual >= quantidade:
+                db[user_id_str]["soul"] = soul_atual - quantidade
+                self.bot.save_db(db)
+                return True
+            return False
+        except:
+            # Fallback para salvar localmente
+            db = self.load_json()
+            user_id_str = str(user_id)
+            soul_atual = db.get(user_id_str, {}).get("soul", 0)
             
-            self.save_json(db)
-            return True
-        return False
+            if soul_atual >= quantidade:
+                db[user_id_str]["soul"] = soul_atual - quantidade
+                self.save_json(db)
+                return True
+            return False
     
     def get_cor_embed(self, raridade: str):
         """Obtém cor do embed baseado na raridade"""
@@ -609,36 +663,60 @@ class Loja(commands.Cog):
     
     async def autocomplete_box(self, interaction: discord.Interaction, current: str):
         """Autocomplete para mostrar lootboxes que o usuário possui"""
-        user_inv = self.get_user_inventory(interaction.user.id)
-        itens_inv = user_inv.get("itens", {})
-        
-        # Filtrar apenas lootboxes que o usuário tem
-        boxes_disponiveis = []
-        for box_id, box_data in self.lootboxes.items():
-            quantidade = itens_inv.get(box_id, 0)
-            if quantidade > 0:
+        try:
+            user_inv = self.get_user_inventory(str(interaction.user.id))
+            itens_inv = user_inv.get("itens", {})
+            
+            # Filtrar apenas lootboxes que o usuário tem
+            boxes_disponiveis = []
+            for box_id, box_data in self.lootboxes.items():
+                quantidade = itens_inv.get(box_id, 0)
+                if quantidade > 0:
+                    boxes_disponiveis.append(
+                        app_commands.Choice(
+                            name=f"{box_data['emoji']} {box_data['nome']} (x{quantidade})",
+                            value=box_id
+                        )
+                    )
+            
+            # Se não tiver boxes, mostrar opção para comprar
+            if not boxes_disponiveis:
                 boxes_disponiveis.append(
                     app_commands.Choice(
-                        name=f"{box_data['emoji']} {box_data['nome']} (x{quantidade})",
-                        value=box_id
+                        name="📦 Nenhuma box — Use /comprar para adquirir",
+                        value="nenhuma"
                     )
                 )
-        
-        # Filtrar baseado no que o usuário está digitando
-        if current:
-            boxes_disponiveis = [
-                choice for choice in boxes_disponiveis
-                if current.lower() in choice.name.lower() or current.lower() in choice.value.lower()
-            ]
-        
-        return boxes_disponiveis[:25]  # Discord limita a 25 opções
+            
+            # Filtrar baseado no que o usuário está digitando
+            if current:
+                boxes_disponiveis = [
+                    choice for choice in boxes_disponiveis
+                    if current.lower() in choice.name.lower() or current.lower() in choice.value.lower()
+                ]
+            
+            return boxes_disponiveis[:25]  # Discord limita a 25 opções
+        except Exception as e:
+            # Se houver erro, retornar lista vazia de choices para evitar crash
+            print(f"Erro no autocomplete_box: {e}")
+            return [app_commands.Choice(name="❌ Erro ao carregar boxes", value="erro")]
     
-    @app_commands.command(name="abrir", description="Abra uma lootbox do seu inventário")
-    @app_commands.describe(box="Escolha uma box para abrir")
+    @app_commands.command(name="abrir", description="Abra uma ou mais lootboxes do seu inventário")
+    @app_commands.describe(box="Escolha uma box para abrir", quantidade="Quantas caixas abrir (padrão: 1, máximo: 10)")
     @app_commands.autocomplete(box=autocomplete_box)
-    async def abrir(self, interaction: discord.Interaction, box: str):
-        """Abre uma lootbox"""
+    async def abrir(self, interaction: discord.Interaction, box: str, quantidade: int = 1):
+        """Abre uma ou mais lootboxes"""
         await interaction.response.defer()
+        
+        # Validar quantidade
+        if quantidade < 1 or quantidade > 10:
+            embed = discord.Embed(
+                title="❌ Quantidade inválida!",
+                description="Você pode abrir entre 1 e 10 caixas por vez.",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
         
         # Verificar se é uma lootbox válida
         if box not in self.lootboxes:
@@ -650,70 +728,80 @@ class Loja(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
         
-        # Verificar se o usuário tem essa box
+        # Verificar se o usuário tem essa quantidade de boxes
         user_inv = self.get_user_inventory(interaction.user.id)
         itens_inv = user_inv.get("itens", {})
         
-        if box not in itens_inv or itens_inv[box] < 1:
+        if box not in itens_inv or itens_inv[box] < quantidade:
+            disponivel = itens_inv.get(box, 0)
             embed = discord.Embed(
-                title="❌ Você não possui essa lootbox!",
-                description=f"Compre na `/loja` primeiro",
+                title="❌ Você não possui essa quantidade de lootboxes!",
+                description=f"Você tem apenas **{disponivel}** {self.lootboxes[box]['nome']}(s)\nCompre na `/loja` primeiro",
                 color=discord.Color.red()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
         
-        # Remover a box do inventário
-        self.remove_item(interaction.user.id, box, 1)
+        # Remover as boxes do inventário
+        self.remove_item(interaction.user.id, box, quantidade)
         
-        # Gerar recompensas
+        # Gerar recompensas para cada caixa
         box_data = self.lootboxes[box]
         recompensas_config = self.box_recompensas.get(box, {})
         
-        # Sortear souls
-        souls_ganhas = random.randint(
-            recompensas_config.get("souls_min", 100),
-            recompensas_config.get("souls_max", 500)
-        )
-        self.add_almas(interaction.user.id, souls_ganhas)
+        # Acumuladores para recompensas totais
+        souls_total = 0
+        itens_acumulados = {}  # {item_id: quantidade_total}
         
-        # Sortear itens
-        itens_ganhos = []
-        for item_config in recompensas_config.get("itens", []):
-            # Verificar se ganha o item baseado na chance
-            if random.random() <= item_config["chance"]:
-                quantidade = random.randint(item_config["qtd_min"], item_config["qtd_max"])
-                self.add_item(interaction.user.id, item_config["id"], quantidade)
-                itens_ganhos.append(f"{item_config['nome']} x{quantidade}")
+        # Processar cada caixa
+        for _ in range(quantidade):
+            # Sortear souls dessa caixa
+            souls_ganhas = random.randint(
+                recompensas_config.get("souls_min", 100),
+                recompensas_config.get("souls_max", 500)
+            )
+            souls_total += souls_ganhas
+            
+            # Sortear itens dessa caixa
+            for item_config in recompensas_config.get("itens", []):
+                # Verificar se ganha o item baseado na chance
+                if random.random() <= item_config["chance"]:
+                    qtd = random.randint(item_config["qtd_min"], item_config["qtd_max"])
+                    item_id = item_config["id"]
+                    
+                    # Adicionar ao acumulador
+                    if item_id not in itens_acumulados:
+                        itens_acumulados[item_id] = {"nome": item_config["nome"], "qtd": 0}
+                    itens_acumulados[item_id]["qtd"] += qtd
+                    
+                    # Adicionar ao inventário
+                    self.add_item(interaction.user.id, item_id, qtd)
         
-        # Animação de abertura
-        embed_opening = discord.Embed(
-            title=f"{box_data['emoji']} Abrindo {box_data['nome']}...",
-            description="✨ *Revelando suas recompensas* ✨",
-            color=self.get_cor_embed(box_data["raridade"])
-        )
-        await interaction.followup.send(embed=embed_opening)
+        # Adicionar souls ao usuário
+        self.add_almas(interaction.user.id, souls_total)
         
-        # Aguardar 2 segundos para criar suspense
-        await asyncio.sleep(2)
-        
-        # Mostrar recompensas
+        # Criar embed de resultado consolidado
+        plural = "a" if quantidade == 1 else "as"
         embed_result = discord.Embed(
-            title=f"🎉 {box_data['nome']} Aberta!",
+            title=f"🎉 {quantidade}x {box_data['nome']} Aberta{plural}!",
             description=f"Você ganhou as seguintes recompensas:",
             color=discord.Color.gold()
         )
         
         embed_result.add_field(
             name="💜 Souls",
-            value=f"**+{souls_ganhas:,}** {self.emoji_alma}",
+            value=f"**+{souls_total:,}** {self.emoji_alma}",
             inline=False
         )
         
-        if itens_ganhos:
+        if itens_acumulados:
+            itens_texto = "\n".join([
+                f"• {data['nome']} x{data['qtd']}"
+                for data in itens_acumulados.values()
+            ])
             embed_result.add_field(
                 name="🎁 Itens",
-                value="\n".join([f"• {item}" for item in itens_ganhos]),
+                value=itens_texto,
                 inline=False
             )
         else:
@@ -725,6 +813,26 @@ class Loja(commands.Cog):
         
         user_souls_total = self.get_almas(interaction.user.id)
         embed_result.set_footer(text=f"Total de Souls: {user_souls_total:,} {self.emoji_alma}")
+        
+        # Animação rápida para múltiplas caixas
+        if quantidade == 1:
+            # Para uma única caixa, manter a animação original
+            embed_opening = discord.Embed(
+                title=f"{box_data['emoji']} Abrindo {box_data['nome']}...",
+                description="✨ *Revelando suas recompensas* ✨",
+                color=self.get_cor_embed(box_data["raridade"])
+            )
+            await interaction.followup.send(embed=embed_opening)
+            await asyncio.sleep(2)
+        else:
+            # Para múltiplas caixas, mostrar uma animação mais rápida
+            embed_opening = discord.Embed(
+                title=f"{box_data['emoji']} Abrindo {quantidade}x {box_data['nome']}...",
+                description="✨ *Revelando suas recompensas* ✨",
+                color=self.get_cor_embed(box_data["raridade"])
+            )
+            await interaction.followup.send(embed=embed_opening)
+            await asyncio.sleep(1)
         
         await interaction.followup.send(embed=embed_result)
     

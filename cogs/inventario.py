@@ -39,114 +39,171 @@ class Inventario(commands.Cog):
             json.dump(data, f, ensure_ascii=False, indent=2)
     
     def get_user_inventory(self, user_id: str):
-        """Obtém inventário do usuário ou cria novo"""
-        db = self.load_json()
+        """Obtém inventário em db[uid]["inventario"] do banco principal."""
+        try:
+            db = self.bot.db()
+            use_bot = True
+        except Exception:
+            db = self.load_json()
+            use_bot = False
+
+        uid = str(user_id)
+        if uid not in db:
+            db[uid] = {}
+        inv = db[uid].get("inventario")
+        if not inv or not isinstance(inv, dict):
+            inv = {"itens": {}, "equipados": {}, "created_at": ""}
+            db[uid]["inventario"] = inv
+            try:
+                if use_bot:
+                    self.bot.save_db(db)
+                else:
+                    self.save_json(db)
+            except Exception:
+                pass
+        return inv
+    
+    def add_item(self, user_id: str, item_id: str, quantidade: int = 1):
+        """Adiciona item ao inventário"""
+        try:
+            db = self.bot.db()
+            is_bot_db = True
+        except:
+            db = self.load_json()
+            is_bot_db = False
+        
         user_id_str = str(user_id)
         
         if "usuarios" not in db:
             db["usuarios"] = {}
         
         if user_id_str not in db["usuarios"]:
-            db["usuarios"][user_id_str] = {
-                "itens": {},
-                "equipados": {},
-                "created_at": ""
-            }
+            db["usuarios"][user_id_str] = {"itens": {}, "equipados": {}, "created_at": ""}
+        
+        if item_id not in db["usuarios"][user_id_str]["itens"]:
+            db["usuarios"][user_id_str]["itens"][item_id] = 0
+        
+        db["usuarios"][user_id_str]["itens"][item_id] += quantidade
+        
+        if is_bot_db:
+            self.bot.save_db(db)
+        else:
             self.save_json(db)
-        
-        return db["usuarios"][user_id_str]
-    
-    def add_item(self, user_id: str, item_id: str, quantidade: int = 1):
-        """Adiciona item ao inventário"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        
-        if "usuarios" not in db:
-            db["usuarios"] = {}
-        
-        user_inv = self.get_user_inventory(user_id)
-        
-        if item_id not in user_inv["itens"]:
-            user_inv["itens"][item_id] = 0
-        
-        user_inv["itens"][item_id] += quantidade
-        db["usuarios"][user_id_str] = user_inv
-        self.save_json(db)
         return True
     
     def remove_item(self, user_id: str, item_id: str, quantidade: int = 1) -> bool:
-        """Remove item do inventário se existir em quantidade suficiente"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        user_inv = self.get_user_inventory(user_id)
+        """Remove item do inventário"""
+        try:
+            db = self.bot.db()
+            is_bot_db = True
+        except:
+            db = self.load_json()
+            is_bot_db = False
         
-        if item_id not in user_inv["itens"] or user_inv["itens"][item_id] < quantidade:
+        user_id_str = str(user_id)
+        
+        if "usuarios" not in db or user_id_str not in db["usuarios"]:
+            return False
+        
+        user_inv = db["usuarios"][user_id_str]
+        
+        if item_id not in user_inv.get("itens", {}) or user_inv["itens"][item_id] < quantidade:
             return False
         
         user_inv["itens"][item_id] -= quantidade
         if user_inv["itens"][item_id] == 0:
             del user_inv["itens"][item_id]
         
-        db["usuarios"][user_id_str] = user_inv
-        self.save_json(db)
+        if is_bot_db:
+            self.bot.save_db(db)
+        else:
+            self.save_json(db)
+        
         return True
     
     def equip_item(self, user_id: str, item_id: str) -> bool:
-        """Equipa um item passivo"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        user_inv = self.get_user_inventory(user_id)
-        
-        if item_id in user_inv["itens"] and user_inv["itens"][item_id] > 0:
-            user_inv["equipados"][item_id] = True
-            db["usuarios"][user_id_str] = user_inv
-            self.save_json(db)
+        """Equipa um item passivo no inventário do usuário."""
+        try:
+            db = self.bot.db()
+            use_bot = True
+        except Exception:
+            db = self.load_json()
+            use_bot = False
+        uid = str(user_id)
+        inv = self.get_user_inventory(user_id)
+        if item_id in inv.get("itens", {}) and inv["itens"][item_id] > 0:
+            inv.setdefault("equipados", {})[item_id] = True
+            db.setdefault(uid, {})["inventario"] = inv
+            if use_bot:
+                self.bot.save_db(db)
+            else:
+                self.save_json(db)
             return True
         return False
     
     def unequip_item(self, user_id: str, item_id: str) -> bool:
-        """Desequipa um item"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        user_inv = self.get_user_inventory(user_id)
-        
-        if item_id in user_inv["equipados"]:
-            del user_inv["equipados"][item_id]
-            db["usuarios"][user_id_str] = user_inv
-            self.save_json(db)
+        """Desequipa um item do inventário do usuário."""
+        try:
+            db = self.bot.db()
+            use_bot = True
+        except Exception:
+            db = self.load_json()
+            use_bot = False
+        uid = str(user_id)
+        inv = self.get_user_inventory(user_id)
+        if item_id in inv.get("equipados", {}):
+            del inv["equipados"][item_id]
+            db.setdefault(uid, {})["inventario"] = inv
+            if use_bot:
+                self.bot.save_db(db)
+            else:
+                self.save_json(db)
             return True
         return False
     
     def get_almas(self, user_id: str) -> int:
-        """Obtém quantidade de souls do usuário do sistema de economia"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        return db.get(user_id_str, {}).get("soul", 0)
+        """Obtém quantidade de souls do usuário do sistema de economia principal"""
+        try:
+            db = self.bot.db()
+        except Exception:
+            db = self.load_json()
+        return db.get(str(user_id), {}).get("soul", 0)
     
     def add_almas(self, user_id: str, quantidade: int):
-        """Adiciona souls ao usuário"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        if user_id_str not in db:
-            db[user_id_str] = {"soul": 0}
-        db[user_id_str]["soul"] = db[user_id_str].get("soul", 0) + quantidade
-        self.save_json(db)
+        """Adiciona souls ao usuário no banco principal"""
+        try:
+            db = self.bot.db()
+            use_bot = True
+        except Exception:
+            db = self.load_json()
+            use_bot = False
+        uid = str(user_id)
+        if uid not in db:
+            db[uid] = {"soul": 0}
+        db[uid]["soul"] = db[uid].get("soul", 0) + quantidade
+        if use_bot:
+            self.bot.save_db(db)
+        else:
+            self.save_json(db)
     
     def remove_almas(self, user_id: str, quantidade: int) -> bool:
-        """Remove souls se tiver quantidade suficiente"""
-        db = self.load_json()
-        user_id_str = str(user_id)
-        soul_atual = db.get(user_id_str, {}).get("soul", 0)
-        
+        """Remove souls do usuário no banco principal, se houver saldo."""
+        try:
+            db = self.bot.db()
+            use_bot = True
+        except Exception:
+            db = self.load_json()
+            use_bot = False
+        uid = str(user_id)
+        soul_atual = db.get(uid, {}).get("soul", 0)
         if soul_atual >= quantidade:
-            db[user_id_str]["soul"] = soul_atual - quantidade
-            
-            # Adicionar ao balance do bot (todas as almas gastas na economia)
-            if "bot_souls" not in db:
-                db["bot_souls"] = 0
-            db["bot_souls"] = db.get("bot_souls", 0) + quantidade
-            
-            self.save_json(db)
+            if uid not in db:
+                db[uid] = {}
+            db[uid]["soul"] = soul_atual - quantidade
+            if use_bot:
+                self.bot.save_db(db)
+            else:
+                self.save_json(db)
             return True
         return False
     
@@ -177,7 +234,14 @@ class Inventario(commands.Cog):
         user_inv = self.get_user_inventory(interaction.user.id)
         
         itens = user_inv.get("itens", {})
-        almas = user_inv.get("almas", 0)
+        
+        # Obter almas do sistema de economia principal do bot
+        try:
+            db_economia = self.bot.db()
+            almas = db_economia.get(str(interaction.user.id), {}).get("soul", 0)
+        except:
+            # Fallback para db.json se bot.db() falhar
+            almas = db.get(str(interaction.user.id), {}).get("soul", 0)
         
         if not itens:
             embed = discord.Embed(
@@ -254,6 +318,13 @@ class Inventario(commands.Cog):
                     value=items_list,
                     inline=False
                 )
+        
+        # Adicionar saldo de almas ao final
+        embed.add_field(
+            name=f"{self.emoji_alma} Souls",
+            value=f"**{almas:,}**",
+            inline=False
+        )
         
         await interaction.response.send_message(embed=embed, ephemeral=False)
     

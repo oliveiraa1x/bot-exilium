@@ -873,14 +873,31 @@ class Economia(commands.Cog):
         
         # Verificar se está em caça longa
         caca_longa = db[uid].get("caca_longa_ativa")
-        if caca_longa:
-            embed = discord.Embed(
-                title="⏰ Caça Longa em Andamento!",
-                description="Você já está em uma caça longa! Use `/caça-longa` para ver o status.",
-                color=discord.Color.orange()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
+        if caca_longa and isinstance(caca_longa, dict):
+            # Verificar se a caça longa já terminou
+            try:
+                fim_dt = datetime.datetime.fromisoformat(caca_longa.get("fim", ""))
+                if now < fim_dt:
+                    # Caça longa ainda em andamento
+                    tempo_restante = (fim_dt - now).total_seconds()
+                    horas = int(tempo_restante // 3600)
+                    minutos = int((tempo_restante % 3600) // 60)
+                    
+                    embed = discord.Embed(
+                        title="⏰ Caça Longa em Andamento!",
+                        description=f"Você já está em uma caça longa! Tempo restante: **{horas}h {minutos}m**\n\nUse `/caça-longa` para ver o status completo.",
+                        color=discord.Color.orange()
+                    )
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    return
+                else:
+                    # Caça longa terminou, processar recompensas
+                    await self.processar_caca_longa(interaction.user.id, interaction.channel_id)
+                    # Não retornar aqui, deixar continuar com a caça normal
+            except (ValueError, KeyError):
+                # Se houver erro ao parsear, remover e continuar
+                db[uid]["caca_longa_ativa"] = None
+                self.bot.save_db(db)
         
         # Iniciar caçada
         embed_inicio = discord.Embed(
@@ -985,6 +1002,14 @@ class Economia(commands.Cog):
             else:
                 # Caça longa já terminou, processar recompensas
                 await self.processar_caca_longa(interaction.user.id, interaction.channel_id)
+                
+                embed = discord.Embed(
+                    title="🌲 Caça Longa Concluída!",
+                    description="Sua caça longa foi finalizada! As recompensas foram entregues no chat.",
+                    color=discord.Color.gold()
+                )
+                embed.set_footer(text="Aeternum Exilium • Sistema de Caça Longa")
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
         
         # Iniciar nova caça longa
@@ -1023,6 +1048,10 @@ class Economia(commands.Cog):
         if not caca_longa:
             return
         
+        # Remover caça longa ANTES de processar recompensas (para evitar duplicação)
+        db[uid]["caca_longa_ativa"] = None
+        self.bot.save_db(db)
+        
         # Calcular recompensas (maiores que caça rápida)
         base_souls = random.randint(200, 500)
         base_xp = random.randint(100, 250)
@@ -1048,11 +1077,6 @@ class Economia(commands.Cog):
         # Adicionar recompensas
         self.add_soul(user_id, bonus_souls)
         leveled_up, new_level = self.add_xp(user_id, bonus_xp)
-        
-        # Recarregar DB e remover caça longa ativa
-        db = self.bot.db()
-        del db[uid]["caca_longa_ativa"]
-        self.bot.save_db(db)
         
         # Criar embed de resultado
         embed = discord.Embed(
@@ -1108,7 +1132,7 @@ class Economia(commands.Cog):
                 continue
 
             caca_longa = data.get("caca_longa_ativa")
-            if not caca_longa:
+            if not caca_longa or not isinstance(caca_longa, dict):
                 continue
             
             try:

@@ -557,30 +557,25 @@ class RPGCombate(commands.Cog):
                         await button_interaction.response.send_message("❌ Apenas quem usou o comando pode equipar!", ephemeral=True)
                         return
                     
-                    # Equipar item
-                    loja_cog = self.cog.bot.get_cog("Loja")
-                    if loja_cog:
-                        db = loja_cog.load_json()
-                        user_id_str = str(interaction.user.id)
-                        
-                        if "usuarios" not in db:
-                            db["usuarios"] = {}
-                        if user_id_str not in db["usuarios"]:
-                            db["usuarios"][user_id_str] = {"itens": {}, "equipados": {}}
-                        
-                        if tipo == "arma":
-                            db["usuarios"][user_id_str]["arma_equipada_rpg"] = item_id
-                        else:
-                            db["usuarios"][user_id_str]["armadura_equipada_rpg"] = item_id
-                        
-                        loja_cog.save_json(db)
-                        
-                        embed_sucesso = discord.Embed(
-                            title="✅ Equipamento Atualizado!",
-                            description=f"Você equipou: **{equip['nome']}**\n\nAgora use `/combate` para lutar!",
-                            color=discord.Color.green()
-                        )
-                        await button_interaction.response.send_message(embed=embed_sucesso, ephemeral=False)
+                    # Equipar item no inventário unificado: db[uid]['inventario']
+                    db = self.cog.bot.db()
+                    user_id_str = str(interaction.user.id)
+                    if user_id_str not in db:
+                        db[user_id_str] = {}
+                    inv = db[user_id_str].get("inventario") or {"itens": {}, "equipados": {}}
+                    if tipo == "arma":
+                        inv["arma_equipada_rpg"] = item_id
+                    else:
+                        inv["armadura_equipada_rpg"] = item_id
+                    db[user_id_str]["inventario"] = inv
+                    self.cog.bot.save_db(db)
+
+                    embed_sucesso = discord.Embed(
+                        title="✅ Equipamento Atualizado!",
+                        description=f"Você equipou: **{equip['nome']}**\n\nAgora use `/combate` para lutar!",
+                        color=discord.Color.green()
+                    )
+                    await button_interaction.response.send_message(embed=embed_sucesso, ephemeral=False)
                 
                 return callback
         
