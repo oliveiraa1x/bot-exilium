@@ -10,6 +10,45 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+# Importar database MongoDB
+try:
+    from database import init_mongodb, get_mongodb
+    HAS_MONGODB = True
+except ImportError:
+    HAS_MONGODB = False
+    print("⚠️ Módulo database não disponível")
+
+
+# ==========================================
+# JSON Encoder para tratar ObjectId e outros tipos
+# ==========================================
+class SafeJSONEncoder(json.JSONEncoder):
+    """
+    Encoder customizado que converte tipos não-serializáveis para JSON
+    - ObjectId do MongoDB -> string
+    - datetime -> ISO format string
+    - set -> list
+    - Outros tipos -> string
+    """
+    def default(self, obj):
+        # ObjectId do MongoDB/PyMongo
+        if type(obj).__name__ == 'ObjectId':
+            return str(obj)
+        # datetime objects
+        if hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        # Sets
+        if isinstance(obj, set):
+            return list(obj)
+        # Bytes
+        if isinstance(obj, bytes):
+            return obj.decode('utf-8', errors='ignore')
+        # Tenta serializar normalmente, caso contrário converte para string
+        try:
+            return super().default(obj)
+        except TypeError:
+            return str(obj)
+
 
 def _resolve_load_dotenv():
     try:
@@ -31,27 +70,120 @@ BASE_DIR = Path(__file__).parent
 DATA_PATH = BASE_DIR / "data" / "db.json"
 CONFIG_PATH = BASE_DIR / "config.json"
 
+# String de conexão do MongoDB com TLS e certificados
+# Os certificados estão na pasta do projeto
+MONGODB_URI = f"mongodb://default:Nlo0HoWFKDDr8jstdTr8BkXt@square-cloud-db-5219ec60d1f54ef49e10d88c86ce81cf.squareweb.app:7107/?authSource=admin&tls=true&tlsCAFile={BASE_DIR / 'certificate.pem'}&tlsCertificateKeyFile={BASE_DIR / 'certificate.pem'}"
+
 
 def ensure_data_file() -> None:
+    """Garante que o arquivo db.json existe"""
     DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not DATA_PATH.exists():
         DATA_PATH.write_text("{}", encoding="utf-8")
 
 
 def load_db() -> dict:
-    ensure_data_file()
-    with DATA_PATH.open("r", encoding="utf-8") as fp:
+    """
+    Sistema híbrido: MongoDB + db.json
+    - Tenta MongoDB primeiro
+    - Se falhar, usa db.json
+    - Sempre mantém db.json atualizado como backup
+    """
+    # Tentar MongoDB primeiro
+    if bot._mongodb_enabled and HAS_MONGODB:
         try:
-            return json.load(fp)
-        except json.JSONDecodeError:
-            # Corrige arquivos corrompidos
-            return {}
+            # Verificar cache
+            now = datetime.datetime.now()
+            if (bot._db_cache_time and 
+                (now - bot._db_cache_time).total_seconds() < bot._db_cache_ttl):
+                return bot._db_cache.copy()
+            
+            mongo = get_mongodb()
+            users = list(mongo.db.users.find({}, {"_id": 0}))
+            
+            # Converter para formato {user_id: dados}
+            db_dict = {}
+            for user in users:
+                uid = user.get("user_id")
+                if uid:
+                    db_dict[uid] = user
+            
+            # Atualizar cache
+            bot._db_cache = db_dict.copy()
+            bot._db_cache_time = now
+            
+            # Salvar backup no db.json
+            ensure_data_file()
+            try:
+                with DATA_PATH.open("w", encoding="utf-8") as fp:
+                    json.dump(db_dict, fp, ensure_ascii=False, indent=2, cls=SafeJSONEncoder)
+            except Exception as e:
+                print(f"⚠️ Erro ao salvar backup db.json: {e}")
+            
+            return db_dict
+            
+        except Exception as e:
+            print(f"⚠️ MongoDB falhou, usando db.json: {e}")
+            bot._mongodb_enabled = False  # Desabilitar MongoDB temporariamente
+    
+    # Fallback: usar db.json
+    ensure_data_file()
+    try:
+        with DATA_PATH.open("r", encoding="utf-8") as fp:
+            data = json.load(fp)
+            # Atualizar cache
+            bot._db_cache = data.copy()
+            bot._db_cache_time = datetime.datetime.now()
+            return data
+    except json.JSONDecodeError:
+        return {}
+    except Exception as e:
+        print(f"Erro ao carregar db.json: {e}")
+        return {}
 
 
 def save_db(data: dict) -> None:
+    """
+    Sistema híbrido: salva em MongoDB E db.json
+    - Tenta salvar no MongoDB
+    - Sempre salva no db.json (backup)
+    - Se MongoDB falhar, continua com db.json
+    """
+    # Invalidar cache
+    bot._db_cache_time = None
+    
+    # Salvar no MongoDB se disponível
+    if bot._mongodb_enabled and HAS_MONGODB:
+        try:
+            mongo = get_mongodb()
+            for user_id, user_data in data.items():
+                if not user_id.isdigit():
+                    continue
+                
+                if "user_id" not in user_data:
+                    user_data["user_id"] = user_id
+                
+                try:
+                    mongo.db.users.update_one(
+                        {"user_id": user_id},
+                        {"$set": user_data},
+                        upsert=True
+                    )
+                except Exception as e:
+                    print(f"⚠️ Erro MongoDB ao salvar {user_id}: {e}")
+                    bot._mongodb_enabled = False  # Desabilitar se falhar
+                    break
+        except Exception as e:
+            print(f"⚠️ MongoDB falhou ao salvar, usando apenas db.json: {e}")
+            bot._mongodb_enabled = False
+    
+    # SEMPRE salvar no db.json como backup
     ensure_data_file()
-    with DATA_PATH.open("w", encoding="utf-8") as fp:
-        json.dump(data, fp, ensure_ascii=False, indent=2)
+    try:
+        with DATA_PATH.open("w", encoding="utf-8") as fp:
+            json.dump(data, fp, ensure_ascii=False, indent=2, cls=SafeJSONEncoder)
+    except Exception as e:
+        print(f"❌ CRÍTICO: Erro ao salvar db.json: {e}")
 
 
 def resolve_token() -> str:
@@ -99,6 +231,13 @@ bot._last_presence = None  # Optional[str]
 
 bot.call_times = {}  # Dict[int, datetime.datetime]
 bot.active_users = set()  # Set[int]
+
+# Cache para dados do DB
+bot._db_cache = {}
+bot._db_cache_time = None
+bot._db_cache_ttl = 5  # Cache válido por 5 segundos
+bot._mongodb_enabled = False  # Será ativado se conectar
+
 bot.db = load_db
 bot.save_db = save_db
 
@@ -126,45 +265,42 @@ def format_time(seconds: int) -> str:
 
 
 def ensure_user_record(user_id: int) -> tuple[dict, str]:
-    uid = str(user_id)
-    db = bot.db()
-    if uid not in db:
-        db[uid] = {
-            "sobre": None,
-            "tempo_total": 0,
-            "soul": 0,
-            "xp": 0,
-            "level": 1,
-            "last_daily": None,
-            "last_mine": None,
-            "mine_streak": 0,
-            "last_caca": None,
-            "caca_streak": 0,
-            "caca_longa_ativa": None,
-            "missoes": [],
-            "missoes_completas": []
-        }
-        bot.save_db(db)
-    else:
-        # Garantir que campos novos existam para usuários antigos
-        defaults = {
-            "soul": 0,
-            "xp": 0,
-            "level": 1,
-            "last_daily": None,
-            "last_mine": None,
-            "mine_streak": 0,
-            "last_caca": None,
-            "caca_streak": 0,
-            "caca_longa_ativa": None,
-            "missoes": [],
-            "missoes_completas": []
-        }
-        for key, value in defaults.items():
-            if key not in db[uid]:
-                db[uid][key] = value
-        bot.save_db(db)
-    return db, uid
+    """
+    Garante que o usuário existe no MongoDB
+    Retorna (db_completo, user_id_str) para compatibilidade
+    """
+    try:
+        mongo = get_mongodb()
+        user = mongo.ensure_user(user_id)
+        uid = str(user_id)
+        
+        # Retornar db completo para compatibilidade
+        db = load_db()
+        db[uid] = user
+        
+        return db, uid
+    except Exception as e:
+        print(f"Erro ao garantir registro do usuário {user_id}: {e}")
+        # Fallback
+        uid = str(user_id)
+        db = load_db()
+        if uid not in db:
+            db[uid] = {
+                "sobre": None,
+                "tempo_total": 0,
+                "soul": 0,
+                "xp": 0,
+                "level": 1,
+                "last_daily": None,
+                "last_mine": None,
+                "mine_streak": 0,
+                "last_caca": None,
+                "caca_streak": 0,
+                "caca_longa_ativa": None,
+                "missoes": [],
+                "missoes_completas": []
+            }
+        return db, uid
 
 
 @bot.tree.command(name="help", description="Lista os comandos disponíveis do Help Exilium.")
@@ -462,6 +598,49 @@ async def on_voice_state_update(member, before, after):
 
 @bot.event
 async def setup_hook():
+    # Tentar conectar ao MongoDB
+    if HAS_MONGODB:
+        try:
+            print("🔄 Tentando conectar ao MongoDB...")
+            # Inicializar MongoDB primeiro
+            mongo = init_mongodb(MONGODB_URI)
+            # Testar conexão
+            mongo.client.admin.command('ping')
+            bot._mongodb_enabled = True
+            print("✅ MongoDB conectado com sucesso!")
+            
+            # Tentar migração automática se db.json tiver dados
+            try:
+                ensure_data_file()
+                with DATA_PATH.open("r", encoding="utf-8") as fp:
+                    local_data = json.load(fp)
+                
+                if local_data:
+                    print("🔄 Migrando dados do db.json para MongoDB...")
+                    count = 0
+                    for user_id, user_data in local_data.items():
+                        if not user_id.isdigit():
+                            continue
+                        if "user_id" not in user_data:
+                            user_data["user_id"] = user_id
+                        
+                        mongo.db.users.update_one(
+                            {"user_id": user_id},
+                            {"$set": user_data},
+                            upsert=True
+                        )
+                        count += 1
+                    print(f"✅ {count} usuários migrados para MongoDB")
+            except Exception as e:
+                print(f"⚠️ Erro na migração automática: {e}")
+                
+        except Exception as e:
+            print(f"⚠️ Não foi possível conectar ao MongoDB: {e}")
+            print("ℹ️  Usando db.json como principal")
+            bot._mongodb_enabled = False
+    else:
+        print("ℹ️  pymongo não instalado - usando db.json")
+    
     # Carregar cogs (import dinâmico para evitar problemas de importação)
     import importlib
     try:
@@ -512,6 +691,14 @@ async def setup_hook():
             await inventario.setup(bot)
     except Exception as e:
         print(f"Erro ao carregar cog inventario: {e}")
+    
+    # Carregar cog de migração administrativa
+    try:
+        admin_migration = importlib.import_module("cogs.admin_migration")
+        if bot.get_cog("AdminMigration") is None:
+            await admin_migration.setup(bot)
+    except Exception as e:
+        print(f"Erro ao carregar cog admin_migration: {e}")
 
     update_status.start()
     await bot.tree.sync()
