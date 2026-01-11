@@ -596,32 +596,26 @@ class Economia(commands.Cog):
 
     @app_commands.command(name="top-souls", description="Ranking dos mais ricos em almas")
     async def top_souls(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         db = self.bot.db()
         
         ranking_items = []
         for uid, data in db.items():
-            # Pular chaves especiais como bot_souls e usuarios
+            # Pular chaves especiais
             if uid in ["bot_souls", "usuarios"]:
                 continue
             
             try:
                 user_id = int(uid)
-                member = interaction.guild.get_member(user_id) if interaction.guild else None
-                if member and not member.bot:
-                    souls = data.get("soul", 0)
-                    ranking_items.append((uid, souls))
-                elif not member:
-                    user = await self.bot.fetch_user(user_id)
-                    if not user.bot:
-                        souls = data.get("soul", 0)
-                        ranking_items.append((uid, souls))
-            except (ValueError, discord.NotFound, discord.HTTPException):
+                souls = data.get("soul", 0)
+                ranking_items.append((uid, souls))
+            except (ValueError, TypeError):
                 continue
         
         ranking = sorted(ranking_items, key=lambda x: x[1], reverse=True)[:10]
         
         embed = discord.Embed(
-            title="🏆 Top 10 — Mais Ricos em Almas",
+            title="🏆 Top 10 — Mais Ricos em Almas (Global)",
             color=discord.Color.gold()
         )
         
@@ -629,14 +623,16 @@ class Economia(commands.Cog):
             embed.description = "Ainda não há registros."
         else:
             for pos, (uid, souls) in enumerate(ranking, start=1):
+                # Tentar buscar do cache do servidor primeiro
                 member = interaction.guild.get_member(int(uid)) if interaction.guild else None
                 if member:
                     nome = member.display_name
                 else:
+                    # Buscar do banco de dados globalmente
                     try:
                         user = await self.bot.fetch_user(int(uid))
                         nome = user.name
-                    except:
+                    except (discord.NotFound, discord.HTTPException):
                         nome = f"Usuário {uid}"
                 embed.add_field(
                     name=f"{pos}. {nome}",
@@ -644,38 +640,31 @@ class Economia(commands.Cog):
                     inline=False
                 )
         
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="top-level", description="Ranking dos maiores níveis")
     async def top_level(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         db = self.bot.db()
         
         ranking_items = []
         for uid, data in db.items():
-            # Pular chaves especiais como bot_souls e usuarios
+            # Pular chaves especiais
             if uid in ["bot_souls", "usuarios"]:
                 continue
             
             try:
                 user_id = int(uid)
-                member = interaction.guild.get_member(user_id) if interaction.guild else None
-                if member and not member.bot:
-                    level = data.get("level", 1)
-                    xp = data.get("xp", 0)
-                    ranking_items.append((uid, level, xp))
-                elif not member:
-                    user = await self.bot.fetch_user(user_id)
-                    if not user.bot:
-                        level = data.get("level", 1)
-                        xp = data.get("xp", 0)
-                        ranking_items.append((uid, level, xp))
-            except (ValueError, discord.NotFound, discord.HTTPException):
+                level = data.get("level", 1)
+                xp = data.get("xp", 0)
+                ranking_items.append((uid, level, xp))
+            except (ValueError, TypeError):
                 continue
         
         ranking = sorted(ranking_items, key=lambda x: (x[1], x[2]), reverse=True)[:10]
         
         embed = discord.Embed(
-            title="🏆 Top 10 — Maiores Níveis",
+            title="🏆 Top 10 — Maiores Níveis (Global)",
             color=discord.Color.purple()
         )
         
@@ -683,14 +672,16 @@ class Economia(commands.Cog):
             embed.description = "Ainda não há registros."
         else:
             for pos, (uid, level, xp) in enumerate(ranking, start=1):
+                # Tentar buscar do cache do servidor primeiro
                 member = interaction.guild.get_member(int(uid)) if interaction.guild else None
                 if member:
                     nome = member.display_name
                 else:
+                    # Buscar do banco de dados globalmente
                     try:
                         user = await self.bot.fetch_user(int(uid))
                         nome = user.name
-                    except:
+                    except (discord.NotFound, discord.HTTPException):
                         nome = f"Usuário {uid}"
                 embed.add_field(
                     name=f"{pos}. {nome}",
@@ -698,7 +689,7 @@ class Economia(commands.Cog):
                     inline=False
                 )
         
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="missoes", description="Veja suas missões disponíveis")
     async def missoes(self, interaction: discord.Interaction):

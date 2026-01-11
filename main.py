@@ -355,55 +355,6 @@ async def slash_set_sobre(interaction: discord.Interaction, texto: str):
     await interaction.response.send_message("✅ Sobre Mim atualizado!")
 
 
-@bot.tree.command(name="top-tempo", description="Mostra o ranking de tempo em call.")
-async def slash_top_tempo(interaction: discord.Interaction):
-    db = bot.db()
-    
-    # Filtrar apenas membros reais (não bots)
-    ranking_items = []
-    for uid, data in db.items():
-        try:
-            user_id = int(uid)
-            # Tenta buscar o membro no servidor
-            member = interaction.guild.get_member(user_id) if interaction.guild else None
-            if member:
-                # Se encontrou o membro, verifica se não é bot
-                if not member.bot:
-                    ranking_items.append((uid, data.get("tempo_total", 0)))
-            else:
-                # Se não encontrou no servidor, tenta buscar o usuário globalmente
-                user = await bot.fetch_user(user_id)
-                if not user.bot:
-                    ranking_items.append((uid, data.get("tempo_total", 0)))
-        except (ValueError, discord.NotFound, discord.HTTPException):
-            # Se não conseguir buscar, pula este usuário
-            continue
-
-    ranking = sorted(
-        ranking_items,
-        key=lambda item: item[1],
-        reverse=True,
-    )[:10]
-
-    embed = discord.Embed(title="🏆 Top 10 — Tempo em Call", color=discord.Color.gold())
-    if not ranking:
-        embed.description = "Ainda não há registros."
-    else:
-        for pos, (uid, seconds) in enumerate(ranking, start=1):
-            member = interaction.guild.get_member(int(uid)) if interaction.guild else None
-            if member:
-                nome = member.display_name
-            else:
-                try:
-                    user = await bot.fetch_user(int(uid))
-                    nome = user.name
-                except:
-                    nome = f"Usuário {uid}"
-            embed.add_field(name=f"{pos}. {nome}", value=format_time(seconds), inline=False)
-
-    await interaction.response.send_message(embed=embed)
-
-
 @bot.tree.command(name="callstatus", description="Mostra seu tempo atual na call.")
 async def slash_callstatus(interaction: discord.Interaction):
     user = interaction.user
@@ -624,6 +575,10 @@ async def setup_hook():
                         if "user_id" not in user_data:
                             user_data["user_id"] = user_id
                         
+                        # Remover _id antes de fazer update (campo imutável no MongoDB)
+                        if "_id" in user_data:
+                            user_data.pop("_id")
+                        
                         mongo.db.users.update_one(
                             {"user_id": user_id},
                             {"$set": user_data},
@@ -691,6 +646,14 @@ async def setup_hook():
             await inventario.setup(bot)
     except Exception as e:
         print(f"Erro ao carregar cog inventario: {e}")
+    
+    # Carregar cog de top tempo
+    try:
+        top_tempo = importlib.import_module("cogs.top_tempo")
+        if bot.get_cog("TopTempo") is None:
+            await top_tempo.setup(bot)
+    except Exception as e:
+        print(f"Erro ao carregar cog top_tempo: {e}")
     
     # Carregar cog de migração administrativa
     try:

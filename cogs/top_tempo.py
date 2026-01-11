@@ -12,33 +12,27 @@ class TopTempo(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def cog_unload(self):
-        self.bot.tree.remove_command(self.top_tempo.name, type=self.top_tempo.type)
-
-    @app_commands.command(name="top-tempo", description="Mostra o ranking de tempo em call.")
+    @app_commands.command(name="top-tempo", description="Mostra o ranking de tempo em call (Global).")
     async def top_tempo(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         db = self.bot.db()
 
-        # Filtrar apenas membros reais (não bots)
+        # Buscar todos os usuários do banco de dados
         ranking_items = []
         for uid, data in db.items():
+            # Pular chaves especiais
+            if uid in ["bot_souls", "usuarios"]:
+                continue
+            
             try:
                 user_id = int(uid)
-                # Tenta buscar o membro no servidor
-                member = interaction.guild.get_member(user_id) if interaction.guild else None
-                if member:
-                    # Se encontrou o membro, verifica se não é bot
-                    if not member.bot:
-                        ranking_items.append((uid, data.get("tempo_total", 0)))
-                else:
-                    # Se não encontrou no servidor, tenta buscar o usuário globalmente
-                    user = await self.bot.fetch_user(user_id)
-                    if not user.bot:
-                        ranking_items.append((uid, data.get("tempo_total", 0)))
-            except (ValueError, discord.NotFound, discord.HTTPException):
-                # Se não conseguir buscar, pula este usuário
+                tempo_total = data.get("tempo_total", 0)
+                if tempo_total > 0:  # Apenas usuários com tempo registrado
+                    ranking_items.append((uid, tempo_total))
+            except (ValueError, TypeError):
                 continue
 
+        # Ordenar e pegar top 10
         ranking = sorted(
             ranking_items,
             key=lambda x: x[1],
@@ -46,29 +40,29 @@ class TopTempo(commands.Cog):
         )[:10]
 
         embed = discord.Embed(
-            title="🏆 Top 10 — Tempo em Call",
+            title="🏆 Top 10 — Tempo em Call (Global)",
             color=discord.Color.gold()
         )
 
         if not ranking:
             embed.description = "Ainda não há registros."
         else:
-            for pos, (uid, sec) in enumerate(ranking, start=1):
-                user = interaction.guild.get_member(int(uid)) if interaction.guild else None
-                if not user:
+            for pos, (uid, seconds) in enumerate(ranking, start=1):
+                # Tentar buscar do cache do servidor primeiro
+                member = interaction.guild.get_member(int(uid)) if interaction.guild else None
+                if member:
+                    nome = member.display_name
+                else:
+                    # Buscar do banco de dados globalmente
                     try:
                         user = await self.bot.fetch_user(int(uid))
-                    except:
+                        nome = user.name
+                    except (discord.NotFound, discord.HTTPException):
                         nome = f"Usuário {uid}"
-                    else:
-                        nome = user.display_name if hasattr(user, 'display_name') else user.name
-                else:
-                    nome = user.display_name
-                embed.add_field(name=f"{pos}. {nome}", value=format_time(sec), inline=False)
+                embed.add_field(name=f"{pos}. {nome}", value=format_time(seconds), inline=False)
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
 async def setup(bot):
-    cog = TopTempo(bot)
-    await bot.add_cog(cog)
-    bot.tree.add_command(cog.top_tempo)
+    if bot.get_cog("TopTempo") is None:
+        await bot.add_cog(TopTempo(bot))

@@ -120,6 +120,126 @@ class AdminMigration(commands.Cog):
                 "❌ Você precisa ser administrador para usar este comando!",
                 ephemeral=True
             )
+    
+    @app_commands.command(name="test-commands", description="[ADMIN] Testa todos os comandos do bot")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def test_commands(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Coletar todos os comandos
+            all_commands = []
+            
+            # Comandos de aplicação (slash commands)
+            for command in self.bot.tree.walk_commands():
+                if isinstance(command, app_commands.Command):
+                    all_commands.append(command)
+            
+            total = len(all_commands)
+            
+            embed = discord.Embed(
+                title="🧪 Teste de Comandos",
+                description=f"Testando **{total}** comandos...",
+                color=discord.Color.blue()
+            )
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+            # Testar comandos
+            working = []
+            errors = []
+            
+            for cmd in all_commands:
+                try:
+                    # Verificar se o comando tem callback
+                    if hasattr(cmd, 'callback'):
+                        # Verificar parâmetros do comando
+                        import inspect
+                        sig = inspect.signature(cmd.callback)
+                        params = list(sig.parameters.values())[1:]  # Pular 'self'
+                        
+                        # Contar parâmetros obrigatórios (sem interaction)
+                        required_params = [p for p in params if p.default == inspect.Parameter.empty and p.name != 'interaction']
+                        
+                        if len(required_params) > 0:
+                            # Comando tem parâmetros obrigatórios
+                            working.append(f"✅ `/{cmd.name}` (com {len(required_params)} parâmetro(s))")
+                        else:
+                            # Comando sem parâmetros obrigatórios
+                            working.append(f"✅ `/{cmd.name}`")
+                    else:
+                        working.append(f"✅ `/{cmd.name}`")
+                        
+                except Exception as e:
+                    errors.append(f"❌ `/{cmd.name}`: {str(e)[:50]}")
+            
+            # Criar embed de resultado
+            result_embed = discord.Embed(
+                title="🧪 Resultado dos Testes",
+                color=discord.Color.green() if not errors else discord.Color.orange()
+            )
+            
+            result_embed.add_field(
+                name="📊 Estatísticas",
+                value=f"**Total:** {total}\n**Funcionando:** {len(working)}\n**Com Erro:** {len(errors)}",
+                inline=False
+            )
+            
+            # Dividir comandos em grupos (Discord tem limite de 1024 caracteres por field)
+            if working:
+                working_text = "\n".join(working)
+                # Dividir se for muito grande
+                if len(working_text) > 1024:
+                    chunks = [working_text[i:i+1024] for i in range(0, len(working_text), 1024)]
+                    for i, chunk in enumerate(chunks, 1):
+                        result_embed.add_field(
+                            name=f"✅ Comandos Funcionando ({i}/{len(chunks)})",
+                            value=chunk,
+                            inline=False
+                        )
+                else:
+                    result_embed.add_field(
+                        name="✅ Comandos Funcionando",
+                        value=working_text,
+                        inline=False
+                    )
+            
+            if errors:
+                errors_text = "\n".join(errors)
+                if len(errors_text) > 1024:
+                    chunks = [errors_text[i:i+1024] for i in range(0, len(errors_text), 1024)]
+                    for i, chunk in enumerate(chunks, 1):
+                        result_embed.add_field(
+                            name=f"❌ Comandos com Erro ({i}/{len(chunks)})",
+                            value=chunk,
+                            inline=False
+                        )
+                else:
+                    result_embed.add_field(
+                        name="❌ Comandos com Erro",
+                        value=errors_text,
+                        inline=False
+                    )
+            
+            result_embed.set_footer(text="Teste realizado com sucesso!")
+            
+            await interaction.edit_original_response(embed=result_embed)
+            
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Erro ao Testar Comandos",
+                description=f"```{str(e)}```",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+    
+    @test_commands.error
+    async def test_commands_error(self, interaction: discord.Interaction, error):
+        if isinstance(error, app_commands.errors.MissingPermissions):
+            await interaction.response.send_message(
+                "❌ Você precisa ser administrador para usar este comando!",
+                ephemeral=True
+            )
 
 
 async def setup(bot):
